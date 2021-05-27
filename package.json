@@ -1,0 +1,24 @@
+{
+  "name": "dfu",
+  "version": "0.1.0",
+  "description": "Driver for working with DFU in a browser over Web USB",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Flipper-Zero/webdfu.git"
+  },
+  "keywords": [
+    "dfu",
+    "web",
+    "flipper"
+  ],
+  "author": "Nikolay Govorov <me@govorov.online> (https://govorov.online)",
+  "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/Flipper-Zero/webdfu/issues"
+  },
+  "homepage": "https://github.com/Flipper-Zero/webdfu#readme"
+}
