@@ -2,8 +2,9 @@
   "name": "dfu",
   "version": "0.1.0",
   "description": "Driver for working with DFU in a browser over Web USB",
-  "main": "dist/index.js",
+  "main": "index.ts",
   "scripts": {
+    "demo": "parcel demo.html",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -20,5 +21,14 @@
   "bugs": {
     "url": "https://github.com/Flipper-Zero/webdfu/issues"
   },
-  "homepage": "https://github.com/Flipper-Zero/webdfu#readme"
+  "browserslist": [
+    "last 1 Chrome version"
+  ],
+  "homepage": "https://github.com/Flipper-Zero/webdfu#readme",
+  "devDependencies": {
+    "@types/w3c-web-serial": "^1.0.1",
+    "@types/w3c-web-usb": "^1.0.4",
+    "parcel-bundler": "^1.12.5",
+    "typescript": "^4.3.2"
+  }
 }

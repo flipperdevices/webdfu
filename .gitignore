@@ -1,2 +1,9 @@
 .idea
 .vscode
+
+# Deps
+node_modules
+
+# Demo
+dist
+.cache
