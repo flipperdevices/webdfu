@@ -1,13 +1,21 @@
-import { dfu, Device as DFUDevice } from './dfu.ts';
-import { Device as DFUSEDevice } from './dfuse.ts';
+import {
+  dfu,
+  DFU,
+  parseConfigurationDescriptor,
+  findAllDfuInterfaces,
+  findDeviceDfuInterfaces
+} from './dfu.ts';
+import { DFUse } from './dfuse.ts';
 
-var device = null;
+let device = null;
 
 function hex4(n) {
   let s = n.toString(16)
+
   while (s.length < 4) {
     s = '0' + s;
   }
+
   return s;
 }
 
@@ -74,7 +82,7 @@ async function fixInterfaceNames(device_, interfaces) {
   // Check if any interface names were not read correctly
   if (interfaces.some(intf => (intf.name == null))) {
     // Manually retrieve the interface name string descriptors
-    let tempDevice = new DFUDevice(device_, interfaces[0]);
+    let tempDevice = new DFU(device_, interfaces[0]);
     await tempDevice.device_.open();
     await tempDevice.device_.selectConfiguration(1);
     let mapping = await tempDevice.readInterfaceNames();
@@ -124,7 +132,7 @@ function getDFUDescriptorProperties(device) {
   // TODO: read the selected configuration's descriptor
   return device.readConfigurationDescriptor(0).then(
     data => {
-      let configDesc = dfu.parseConfigurationDescriptor(data);
+      let configDesc = parseConfigurationDescriptor(data);
       let funcDesc = null;
       let configValue = device.settings.configuration.configurationValue;
       if (configDesc.bConfigurationValue == configValue) {
@@ -227,39 +235,8 @@ document.addEventListener('DOMContentLoaded', event => {
   let statusDisplay = document.querySelector("#status") as HTMLDivElement;
   let infoDisplay = document.querySelector("#usbInfo") as HTMLDivElement;
   let dfuDisplay = document.querySelector("#dfuInfo") as HTMLDivElement;
-  let vidField = document.querySelector("#vid") as HTMLInputElement;
   let interfaceDialog = document.querySelector("#interfaceDialog") as HTMLDialogElement;
   let interfaceForm = document.querySelector("#interfaceForm") as HTMLFormElement;
-
-  let searchParams = new URLSearchParams(window.location.search);
-  let fromLandingPage = false;
-  let vid = 0;
-  // Set the vendor ID from the landing page URL
-  if (searchParams.has("vid")) {
-    const vidString = searchParams.get("vid");
-    try {
-      if (vidString.toLowerCase().startsWith("0x")) {
-        vid = parseInt(vidString, 16);
-      } else {
-        vid = parseInt(vidString, 10);
-      }
-      vidField.value = "0x" + hex4(vid).toUpperCase();
-      fromLandingPage = true;
-    } catch (error) {
-      console.log("Bad VID " + vidString + ":" + error);
-    }
-  }
-
-  // Grab the serial number from the landing page
-  let serial = "";
-  if (searchParams.has("serial")) {
-    serial = searchParams.get("serial");
-    // Workaround for Chromium issue 339054
-    if (window.location.search.endsWith("/") && serial.endsWith("/")) {
-      serial = serial.substring(0, serial.length - 1);
-    }
-    fromLandingPage = true;
-  }
 
   let configForm = document.querySelector("#configForm") as HTMLFormElement;
 
@@ -342,7 +319,7 @@ document.addEventListener('DOMContentLoaded', event => {
       }
 
       if (desc.DFUVersion == 0x011a && device.settings.alternate.interfaceProtocol == 0x02) {
-        device = new DFUSEDevice(device.device_, device.settings);
+        device = new DFUse(device.device_, device.settings);
         if (device.memoryInfo) {
           let totalSize = 0;
           for (let segment of device.memoryInfo.segments) {
@@ -433,7 +410,7 @@ document.addEventListener('DOMContentLoaded', event => {
   }
 
   function autoConnect(vid, serial) {
-    dfu.findAllDfuInterfaces().then(
+    findAllDfuInterfaces().then(
       async dfu_devices => {
         let matching_devices = [];
         for (let dfu_device of dfu_devices) {
@@ -457,16 +434,11 @@ document.addEventListener('DOMContentLoaded', event => {
           } else {
             statusDisplay.textContent = "Multiple DFU interfaces found.";
           }
-          vidField.value = "0x" + hex4(matching_devices[0].device_.vendorId).toUpperCase();
           vid = matching_devices[0].device_.vendorId;
         }
       }
     );
   }
-
-  vidField.addEventListener("change", function () {
-    vid = parseInt(vidField.value, 16);
-  });
 
   transferSizeField.addEventListener("change", function () {
     transferSize = parseInt(transferSizeField.value);
@@ -495,21 +467,15 @@ document.addEventListener('DOMContentLoaded', event => {
       device.close().then(onDisconnect);
       device = null;
     } else {
-      let filters = [];
-      if (serial) {
-        filters.push({'serialNumber': serial});
-      } else if (vid) {
-        filters.push({'vendorId': vid});
-      }
-      navigator.usb.requestDevice({'filters': filters}).then(
+      navigator.usb.requestDevice({'filters': []}).then(
         async selectedDevice => {
-          let interfaces = dfu.findDeviceDfuInterfaces(selectedDevice);
+          let interfaces = findDeviceDfuInterfaces(selectedDevice);
           if (interfaces.length == 0) {
             console.log(selectedDevice);
             statusDisplay.textContent = "The selected device does not have any USB DFU interfaces.";
           } else if (interfaces.length == 1) {
             await fixInterfaceNames(selectedDevice, interfaces);
-            device = await connect(new DFUDevice(selectedDevice, interfaces[0]));
+            device = await connect(new DFU(selectedDevice, interfaces[0]));
           } else {
             await fixInterfaceNames(selectedDevice, interfaces);
             populateInterfaceList(interfaceForm, selectedDevice, interfaces);
@@ -517,7 +483,7 @@ document.addEventListener('DOMContentLoaded', event => {
             const connectToSelectedInterface = async function connectToSelectedInterface() {
               interfaceForm.removeEventListener('submit', this);
               const index = interfaceForm.elements["interfaceIndex"].value;
-              device = await connect(new DFUDevice(selectedDevice, interfaces[index]));
+              device = await connect(new DFU(selectedDevice, interfaces[index]));
             }
 
             interfaceForm.addEventListener('submit', connectToSelectedInterface);
@@ -625,6 +591,7 @@ document.addEventListener('DOMContentLoaded', event => {
   downloadButton.addEventListener('click', async function (event) {
     event.preventDefault();
     event.stopPropagation();
+
     if (!configForm.checkValidity()) {
       configForm.reportValidity();
       return false;
@@ -633,6 +600,7 @@ document.addEventListener('DOMContentLoaded', event => {
     if (device && firmwareFile != null) {
       setLogContext(downloadLog);
       clearLog(downloadLog);
+
       try {
         let status = await device.getStatus();
         if (status.state == dfu.dfuERROR) {
@@ -641,6 +609,7 @@ document.addEventListener('DOMContentLoaded', event => {
       } catch (error) {
         device.logWarning("Failed to clear status");
       }
+
       await device.do_download(transferSize, firmwareFile, manifestationTolerant).then(
         () => {
           logInfo("Done!");
@@ -664,19 +633,14 @@ document.addEventListener('DOMContentLoaded', event => {
         }
       )
     }
-
-    //return false;
   });
 
-  // Check if WebUSB is available
-  if (typeof navigator.usb !== 'undefined') {
-    navigator.usb.addEventListener("disconnect", onUnexpectedDisconnect);
-    // Try connecting automatically
-    if (fromLandingPage) {
-      autoConnect(vid, serial);
-    }
-  } else {
+  if (typeof navigator.usb === 'undefined') {
     statusDisplay.textContent = 'WebUSB not available.'
     connectButton.disabled = true;
+
+    return;
   }
+
+  navigator.usb.addEventListener("disconnect", onUnexpectedDisconnect);
 });

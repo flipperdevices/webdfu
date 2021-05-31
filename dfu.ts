@@ -5,10 +5,11 @@ export const dfu = {
   GETSTATUS: 0x03,
   CLRSTATUS: 0x04,
   GETSTATE: 0x05,
-  ABORT: 6,
+  ABORT: 0x06,
 
   appIDLE: 0,
   appDETACH: 1,
+
   dfuIDLE: 2,
   dfuDNLOAD_SYNC: 3,
   dfuDNBUSY: 4,
@@ -20,152 +21,154 @@ export const dfu = {
   dfuERROR: 10,
 
   STATUS_OK: 0x0,
-
-  parseDeviceDescriptor: function (data) {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bcdUSB: data.getUint16(2, true),
-      bDeviceClass: data.getUint8(4),
-      bDeviceSubClass: data.getUint8(5),
-      bDeviceProtocol: data.getUint8(6),
-      bMaxPacketSize: data.getUint8(7),
-      idVendor: data.getUint16(8, true),
-      idProduct: data.getUint16(10, true),
-      bcdDevice: data.getUint16(12, true),
-      iManufacturer: data.getUint8(14),
-      iProduct: data.getUint8(15),
-      iSerialNumber: data.getUint8(16),
-      bNumConfigurations: data.getUint8(17),
-    };
-  },
-
-  parseConfigurationDescriptor: function (data) {
-    let descriptorData = new DataView(data.buffer.slice(9));
-    let descriptors = dfu.parseSubDescriptors(descriptorData);
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      wTotalLength: data.getUint16(2, true),
-      bNumInterfaces: data.getUint8(4),
-      bConfigurationValue: data.getUint8(5),
-      iConfiguration: data.getUint8(6),
-      bmAttributes: data.getUint8(7),
-      bMaxPower: data.getUint8(8),
-      descriptors: descriptors
-    };
-  },
-
-  parseInterfaceDescriptor: function (data) {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bInterfaceNumber: data.getUint8(2),
-      bAlternateSetting: data.getUint8(3),
-      bNumEndpoints: data.getUint8(4),
-      bInterfaceClass: data.getUint8(5),
-      bInterfaceSubClass: data.getUint8(6),
-      bInterfaceProtocol: data.getUint8(7),
-      iInterface: data.getUint8(8),
-      descriptors: []
-    };
-  },
-
-  parseFunctionalDescriptor: function (data) {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bmAttributes: data.getUint8(2),
-      wDetachTimeOut: data.getUint16(3, true),
-      wTransferSize: data.getUint16(5, true),
-      bcdDFUVersion: data.getUint16(7, true)
-    };
-  },
-
-  parseSubDescriptors: function (descriptorData) {
-    const DT_INTERFACE = 4;
-    const DT_ENDPOINT = 5;
-    const DT_DFU_FUNCTIONAL = 0x21;
-    const USB_CLASS_APP_SPECIFIC = 0xFE;
-    const USB_SUBCLASS_DFU = 0x01;
-    let remainingData = descriptorData;
-    let descriptors = [];
-    let currIntf;
-    let inDfuIntf = false;
-    while (remainingData.byteLength > 2) {
-      let bLength = remainingData.getUint8(0);
-      let bDescriptorType = remainingData.getUint8(1);
-      let descData = new DataView(remainingData.buffer.slice(0, bLength));
-      if (bDescriptorType == DT_INTERFACE) {
-        currIntf = dfu.parseInterfaceDescriptor(descData);
-        if (currIntf.bInterfaceClass == USB_CLASS_APP_SPECIFIC &&
-          currIntf.bInterfaceSubClass == USB_SUBCLASS_DFU) {
-          inDfuIntf = true;
-        } else {
-          inDfuIntf = false;
-        }
-        descriptors.push(currIntf);
-      } else if (inDfuIntf && bDescriptorType == DT_DFU_FUNCTIONAL) {
-        let funcDesc = dfu.parseFunctionalDescriptor(descData)
-        descriptors.push(funcDesc);
-        currIntf.descriptors.push(funcDesc);
-      } else {
-        let desc = {
-          bLength: bLength,
-          bDescriptorType: bDescriptorType,
-          data: descData
-        };
-        descriptors.push(desc);
-        if (currIntf) {
-          currIntf.descriptors.push(desc);
-        }
-      }
-      remainingData = new DataView(remainingData.buffer.slice(bLength));
-    }
-
-    return descriptors;
-  },
-
-  findDeviceDfuInterfaces: function (device) {
-    let interfaces = [];
-    for (let conf of device.configurations) {
-      for (let intf of conf.interfaces) {
-        for (let alt of intf.alternates) {
-          if (alt.interfaceClass == 0xFE &&
-            alt.interfaceSubclass == 0x01 &&
-            (alt.interfaceProtocol == 0x01 || alt.interfaceProtocol == 0x02)) {
-            let settings = {
-              "configuration": conf,
-              "interface": intf,
-              "alternate": alt,
-              "name": alt.interfaceName
-            };
-            interfaces.push(settings);
-          }
-        }
-      }
-    }
-
-    return interfaces;
-  },
-
-  findAllDfuInterfaces: function () {
-    return navigator.usb.getDevices().then(
-      devices => {
-        let matches = [];
-        for (let device of devices) {
-          let interfaces = dfu.findDeviceDfuInterfaces(device);
-          for (let interface_ of interfaces) {
-            matches.push(new Device(device, interface_))
-          }
-        }
-        return matches;
-      }
-    )
-  },
 };
 
-export class Device {
+export function parseDeviceDescriptor(data) {
+  return {
+    bLength: data.getUint8(0),
+    bDescriptorType: data.getUint8(1),
+    bcdUSB: data.getUint16(2, true),
+    bDeviceClass: data.getUint8(4),
+    bDeviceSubClass: data.getUint8(5),
+    bDeviceProtocol: data.getUint8(6),
+    bMaxPacketSize: data.getUint8(7),
+    idVendor: data.getUint16(8, true),
+    idProduct: data.getUint16(10, true),
+    bcdDevice: data.getUint16(12, true),
+    iManufacturer: data.getUint8(14),
+    iProduct: data.getUint8(15),
+    iSerialNumber: data.getUint8(16),
+    bNumConfigurations: data.getUint8(17),
+  };
+}
+
+export function parseConfigurationDescriptor(data) {
+  let descriptorData = new DataView(data.buffer.slice(9));
+  let descriptors = parseSubDescriptors(descriptorData);
+
+  return {
+    bLength: data.getUint8(0),
+    bDescriptorType: data.getUint8(1),
+    wTotalLength: data.getUint16(2, true),
+    bNumInterfaces: data.getUint8(4),
+    bConfigurationValue: data.getUint8(5),
+    iConfiguration: data.getUint8(6),
+    bmAttributes: data.getUint8(7),
+    bMaxPower: data.getUint8(8),
+    descriptors: descriptors
+  };
+}
+
+export function parseInterfaceDescriptor(data) {
+  return {
+    bLength: data.getUint8(0),
+    bDescriptorType: data.getUint8(1),
+    bInterfaceNumber: data.getUint8(2),
+    bAlternateSetting: data.getUint8(3),
+    bNumEndpoints: data.getUint8(4),
+    bInterfaceClass: data.getUint8(5),
+    bInterfaceSubClass: data.getUint8(6),
+    bInterfaceProtocol: data.getUint8(7),
+    iInterface: data.getUint8(8),
+    descriptors: []
+  };
+}
+
+export function parseFunctionalDescriptor(data) {
+  return {
+    bLength: data.getUint8(0),
+    bDescriptorType: data.getUint8(1),
+    bmAttributes: data.getUint8(2),
+    wDetachTimeOut: data.getUint16(3, true),
+    wTransferSize: data.getUint16(5, true),
+    bcdDFUVersion: data.getUint16(7, true)
+  };
+}
+
+export function parseSubDescriptors(descriptorData) {
+  const DT_INTERFACE = 4;
+  const DT_ENDPOINT = 5;
+  const DT_DFU_FUNCTIONAL = 0x21;
+  const USB_CLASS_APP_SPECIFIC = 0xFE;
+  const USB_SUBCLASS_DFU = 0x01;
+  let remainingData = descriptorData;
+  let descriptors = [];
+  let currIntf;
+  let inDfuIntf = false;
+  while (remainingData.byteLength > 2) {
+    let bLength = remainingData.getUint8(0);
+    let bDescriptorType = remainingData.getUint8(1);
+    let descData = new DataView(remainingData.buffer.slice(0, bLength));
+    if (bDescriptorType == DT_INTERFACE) {
+      currIntf = parseInterfaceDescriptor(descData);
+      if (currIntf.bInterfaceClass == USB_CLASS_APP_SPECIFIC &&
+        currIntf.bInterfaceSubClass == USB_SUBCLASS_DFU) {
+        inDfuIntf = true;
+      } else {
+        inDfuIntf = false;
+      }
+      descriptors.push(currIntf);
+    } else if (inDfuIntf && bDescriptorType == DT_DFU_FUNCTIONAL) {
+      let funcDesc = parseFunctionalDescriptor(descData)
+      descriptors.push(funcDesc);
+      currIntf.descriptors.push(funcDesc);
+    } else {
+      let desc = {
+        bLength: bLength,
+        bDescriptorType: bDescriptorType,
+        data: descData
+      };
+      descriptors.push(desc);
+      if (currIntf) {
+        currIntf.descriptors.push(desc);
+      }
+    }
+    remainingData = new DataView(remainingData.buffer.slice(bLength));
+  }
+
+  return descriptors;
+}
+
+export function findDeviceDfuInterfaces(device) {
+  let interfaces = [];
+
+  for (let conf of device.configurations) {
+    for (let intf of conf.interfaces) {
+      for (let alt of intf.alternates) {
+        if (alt.interfaceClass == 0xFE &&
+          alt.interfaceSubclass == 0x01 &&
+          (alt.interfaceProtocol == 0x01 || alt.interfaceProtocol == 0x02)
+        ) {
+          interfaces.push({
+            "configuration": conf,
+            "interface": intf,
+            "alternate": alt,
+            "name": alt.interfaceName
+          });
+        }
+      }
+    }
+  }
+
+  return interfaces;
+}
+
+export function findAllDfuInterfaces() {
+  return navigator.usb.getDevices().then(
+    devices => {
+      let matches = [];
+      for (let device of devices) {
+        let interfaces = findDeviceDfuInterfaces(device);
+        for (let interface_ of interfaces) {
+          matches.push(new DFU(device, interface_))
+        }
+      }
+      return matches;
+    }
+  )
+}
+
+export class DFU {
   constructor(public device_: USBDevice, public settings: USBInterface) {
   };
 
@@ -182,11 +185,11 @@ export class Device {
   };
 
   logWarning(msg) {
-    console.log(msg);
+    console.warn(msg);
   };
 
   logError(msg) {
-    console.log(msg);
+    console.error(msg);
   };
 
   logProgress(done, total) {
@@ -298,7 +301,7 @@ export class Device {
     let allStringIndices = new Set();
     for (let configIndex = 0; configIndex < this.device_.configurations.length; configIndex++) {
       const rawConfig = await this.readConfigurationDescriptor(configIndex);
-      let configDesc = dfu.parseConfigurationDescriptor(rawConfig);
+      let configDesc = parseConfigurationDescriptor(rawConfig);
       let configValue = configDesc.bConfigurationValue;
       configs[configValue] = {};
 

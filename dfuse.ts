@@ -1,4 +1,4 @@
-import { dfu, Device as DFUDevice } from './dfu';
+import { dfu, DFU } from './dfu';
 
 export type DFUMemorySegment = {
   start: number;
@@ -16,7 +16,7 @@ export const dfuse = {
   ERASE_SECTOR: 0x41,
 };
 
-export class Device extends DFUDevice {
+export class DFUse extends DFU {
   startAddress: number;
   memoryInfo?: { name: string, segments: DFUMemorySegment[] };
 
