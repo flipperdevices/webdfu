@@ -55,7 +55,7 @@ export function parseConfigurationDescriptor(data) {
     iConfiguration: data.getUint8(6),
     bmAttributes: data.getUint8(7),
     bMaxPower: data.getUint8(8),
-    descriptors: descriptors
+    descriptors: descriptors,
   };
 }
 
@@ -70,7 +70,7 @@ export function parseInterfaceDescriptor(data) {
     bInterfaceSubClass: data.getUint8(6),
     bInterfaceProtocol: data.getUint8(7),
     iInterface: data.getUint8(8),
-    descriptors: []
+    descriptors: [],
   };
 }
 
@@ -81,7 +81,7 @@ export function parseFunctionalDescriptor(data) {
     bmAttributes: data.getUint8(2),
     wDetachTimeOut: data.getUint16(3, true),
     wTransferSize: data.getUint16(5, true),
-    bcdDFUVersion: data.getUint16(7, true)
+    bcdDFUVersion: data.getUint16(7, true),
   };
 }
 
@@ -89,7 +89,7 @@ export function parseSubDescriptors(descriptorData) {
   const DT_INTERFACE = 4;
   const DT_ENDPOINT = 5;
   const DT_DFU_FUNCTIONAL = 0x21;
-  const USB_CLASS_APP_SPECIFIC = 0xFE;
+  const USB_CLASS_APP_SPECIFIC = 0xfe;
   const USB_SUBCLASS_DFU = 0x01;
   let remainingData = descriptorData;
   let descriptors = [];
@@ -101,22 +101,21 @@ export function parseSubDescriptors(descriptorData) {
     let descData = new DataView(remainingData.buffer.slice(0, bLength));
     if (bDescriptorType == DT_INTERFACE) {
       currIntf = parseInterfaceDescriptor(descData);
-      if (currIntf.bInterfaceClass == USB_CLASS_APP_SPECIFIC &&
-        currIntf.bInterfaceSubClass == USB_SUBCLASS_DFU) {
+      if (currIntf.bInterfaceClass == USB_CLASS_APP_SPECIFIC && currIntf.bInterfaceSubClass == USB_SUBCLASS_DFU) {
         inDfuIntf = true;
       } else {
         inDfuIntf = false;
       }
       descriptors.push(currIntf);
     } else if (inDfuIntf && bDescriptorType == DT_DFU_FUNCTIONAL) {
-      let funcDesc = parseFunctionalDescriptor(descData)
+      let funcDesc = parseFunctionalDescriptor(descData);
       descriptors.push(funcDesc);
       currIntf.descriptors.push(funcDesc);
     } else {
       let desc = {
         bLength: bLength,
         bDescriptorType: bDescriptorType,
-        data: descData
+        data: descData,
       };
       descriptors.push(desc);
       if (currIntf) {
@@ -135,15 +134,16 @@ export function findDeviceDfuInterfaces(device) {
   for (let conf of device.configurations) {
     for (let intf of conf.interfaces) {
       for (let alt of intf.alternates) {
-        if (alt.interfaceClass == 0xFE &&
+        if (
+          alt.interfaceClass == 0xfe &&
           alt.interfaceSubclass == 0x01 &&
           (alt.interfaceProtocol == 0x01 || alt.interfaceProtocol == 0x02)
         ) {
           interfaces.push({
-            "configuration": conf,
-            "interface": intf,
-            "alternate": alt,
-            "name": alt.interfaceName
+            configuration: conf,
+            interface: intf,
+            alternate: alt,
+            name: alt.interfaceName,
           });
         }
       }
@@ -154,57 +154,51 @@ export function findDeviceDfuInterfaces(device) {
 }
 
 export function findAllDfuInterfaces() {
-  return navigator.usb.getDevices().then(
-    devices => {
-      let matches = [];
-      for (let device of devices) {
-        let interfaces = findDeviceDfuInterfaces(device);
-        for (let interface_ of interfaces) {
-          matches.push(new DFU(device, interface_))
-        }
+  return navigator.usb.getDevices().then((devices) => {
+    let matches = [];
+    for (let device of devices) {
+      let interfaces = findDeviceDfuInterfaces(device);
+      for (let interface_ of interfaces) {
+        matches.push(new DFU(device, interface_));
       }
-      return matches;
     }
-  )
+    return matches;
+  });
 }
 
 export class DFU {
-  constructor(public device_: USBDevice, public settings: USBInterface) {
-  };
+  constructor(public device_: USBDevice, public settings: USBInterface) {}
 
   get intfNumber(): number {
-    return this.settings["interface"].interfaceNumber
+    return this.settings["interface"].interfaceNumber;
   }
 
-  logDebug(msg) {
-
-  };
+  logDebug(msg) {}
 
   logInfo(msg) {
     console.log(msg);
-  };
+  }
 
   logWarning(msg) {
     console.warn(msg);
-  };
+  }
 
   logError(msg) {
     console.error(msg);
-  };
+  }
 
   logProgress(done, total) {
-    if (typeof total === 'undefined') {
-      console.log(done)
+    if (typeof total === "undefined") {
+      console.log(done);
     } else {
-      console.log(done + '/' + total);
+      console.log(done + "/" + total);
     }
-  };
+  }
 
   async open() {
     await this.device_.open();
     const confValue = this.settings.configuration.configurationValue;
-    if (this.device_.configuration === null ||
-      this.device_.configuration.configurationValue != confValue) {
+    if (this.device_.configuration === null || this.device_.configuration.configurationValue != confValue) {
       await this.device_.selectConfiguration(confValue);
     }
 
@@ -215,8 +209,7 @@ export class DFU {
 
     const altSetting = this.settings.alternate.alternateSetting;
     let intf = this.device_.configuration.interfaces[intfNumber];
-    if (intf.alternate === null ||
-      intf.alternate.alternateSetting != altSetting) {
+    if (intf.alternate === null || intf.alternate.alternateSetting != altSetting) {
       await this.device_.selectAlternateInterface(intfNumber, altSetting);
     }
   }
@@ -227,32 +220,35 @@ export class DFU {
     } catch (error) {
       console.log(error);
     }
-  };
+  }
 
   readDeviceDescriptor() {
     const GET_DESCRIPTOR = 0x06;
     const DT_DEVICE = 0x01;
-    const wValue = (DT_DEVICE << 8);
+    const wValue = DT_DEVICE << 8;
 
-    return this.device_.controlTransferIn({
-      "requestType": "standard",
-      "recipient": "device",
-      "request": GET_DESCRIPTOR,
-      "value": wValue,
-      "index": 0
-    }, 18).then(
-      result => {
+    return this.device_
+      .controlTransferIn(
+        {
+          requestType: "standard",
+          recipient: "device",
+          request: GET_DESCRIPTOR,
+          value: wValue,
+          index: 0,
+        },
+        18
+      )
+      .then((result) => {
         if (result.status == "ok") {
           return Promise.resolve(result.data);
         } else {
           return Promise.reject(result.status);
         }
-      }
-    );
-  };
+      });
+  }
 
   async readStringDescriptor(index, langID) {
-    if (typeof langID === 'undefined') {
+    if (typeof langID === "undefined") {
       langID = 0;
     }
 
@@ -261,12 +257,12 @@ export class DFU {
     const wValue = (DT_STRING << 8) | index;
 
     const request_setup = {
-      "requestType": "standard",
-      "recipient": "device",
-      "request": GET_DESCRIPTOR,
-      "value": wValue,
-      "index": langID
-    }
+      requestType: "standard",
+      recipient: "device",
+      request: GET_DESCRIPTOR,
+      value: wValue,
+      index: langID,
+    };
 
     // Read enough for bLength
     var result = await this.device_.controlTransferIn(request_setup, 1);
@@ -292,7 +288,7 @@ export class DFU {
     }
 
     throw `Failed to read string descriptor ${index}: ${result.status}`;
-  };
+  }
 
   async readInterfaceNames() {
     const DT_INTERFACE = 4;
@@ -340,87 +336,102 @@ export class DFU {
     }
 
     return configs;
-  };
+  }
 
   readConfigurationDescriptor(index) {
     const GET_DESCRIPTOR = 0x06;
     const DT_CONFIGURATION = 0x02;
-    const wValue = ((DT_CONFIGURATION << 8) | index);
+    const wValue = (DT_CONFIGURATION << 8) | index;
 
-    return this.device_.controlTransferIn({
-      "requestType": "standard",
-      "recipient": "device",
-      "request": GET_DESCRIPTOR,
-      "value": wValue,
-      "index": 0
-    }, 4).then(
-      result => {
+    return this.device_
+      .controlTransferIn(
+        {
+          requestType: "standard",
+          recipient: "device",
+          request: GET_DESCRIPTOR,
+          value: wValue,
+          index: 0,
+        },
+        4
+      )
+      .then((result) => {
         if (result.status == "ok") {
           // Read out length of the configuration descriptor
           let wLength = result.data.getUint16(2, true);
-          return this.device_.controlTransferIn({
-            "requestType": "standard",
-            "recipient": "device",
-            "request": GET_DESCRIPTOR,
-            "value": wValue,
-            "index": 0
-          }, wLength);
+          return this.device_.controlTransferIn(
+            {
+              requestType: "standard",
+              recipient: "device",
+              request: GET_DESCRIPTOR,
+              value: wValue,
+              index: 0,
+            },
+            wLength
+          );
         } else {
           return Promise.reject(result.status);
         }
-      }
-    ).then(
-      result => {
+      })
+      .then((result) => {
         if (result.status == "ok") {
           return Promise.resolve(result.data);
         } else {
           return Promise.reject(result.status);
         }
-      }
-    );
-  };
+      });
+  }
 
   requestOut(bRequest, data, wValue = 0) {
-    return this.device_.controlTransferOut({
-      "requestType": "class",
-      "recipient": "interface",
-      "request": bRequest,
-      "value": wValue,
-      "index": this.intfNumber
-    }, data).then(
-      result => {
-        if (result.status == "ok") {
-          return Promise.resolve(result.bytesWritten);
-        } else {
-          return Promise.reject(result.status);
+    return this.device_
+      .controlTransferOut(
+        {
+          requestType: "class",
+          recipient: "interface",
+          request: bRequest,
+          value: wValue,
+          index: this.intfNumber,
+        },
+        data
+      )
+      .then(
+        (result) => {
+          if (result.status == "ok") {
+            return Promise.resolve(result.bytesWritten);
+          } else {
+            return Promise.reject(result.status);
+          }
+        },
+        (error) => {
+          return Promise.reject("ControlTransferOut failed: " + error);
         }
-      },
-      error => {
-        return Promise.reject("ControlTransferOut failed: " + error);
-      }
-    );
-  };
+      );
+  }
 
   requestIn(bRequest, wLength, wValue = 0) {
-    return this.device_.controlTransferIn({
-      "requestType": "class",
-      "recipient": "interface",
-      "request": bRequest,
-      "value": wValue,
-      "index": this.intfNumber
-    }, wLength).then(
-      result => {
-        if (result.status == "ok") {
-          return Promise.resolve(result.data);
-        } else {
-          return Promise.reject(result.status);
+    return this.device_
+      .controlTransferIn(
+        {
+          requestType: "class",
+          recipient: "interface",
+          request: bRequest,
+          value: wValue,
+          index: this.intfNumber,
+        },
+        wLength
+      )
+      .then(
+        (result) => {
+          if (result.status == "ok") {
+            return Promise.resolve(result.data);
+          } else {
+            return Promise.reject(result.status);
+          }
+        },
+        (error) => {
+          return Promise.reject("ControlTransferIn failed: " + error);
         }
-      },
-      error => {
-        return Promise.reject("ControlTransferIn failed: " + error);
-      }
-    );
-  };
+      );
+  }
 
   detach() {
     return this.requestOut(dfu.DETACH, undefined, 1000);
@@ -439,7 +450,7 @@ export class DFU {
           if (device.disconnected !== true) {
             reject("Disconnect timeout expired");
           }
-        }
+        };
 
         timeoutID = setTimeout(onTimeout, timeout);
       }
@@ -458,43 +469,42 @@ export class DFU {
 
       navigator.usb.addEventListener("disconnect", onDisconnect);
     });
-  };
+  }
 
   download(data, blockNum) {
     return this.requestOut(dfu.DNLOAD, data, blockNum);
-  };
+  }
 
   upload(length, blockNum) {
-    return this.requestIn(dfu.UPLOAD, length, blockNum)
-  };
+    return this.requestIn(dfu.UPLOAD, length, blockNum);
+  }
 
   clearStatus() {
     return this.requestOut(dfu.CLRSTATUS);
-  };
+  }
 
   getStatus() {
     return this.requestIn(dfu.GETSTATUS, 6).then(
-      data =>
+      (data) =>
         Promise.resolve({
-          "status": data.getUint8(0),
-          "pollTimeout": data.getUint32(1, true) & 0xFFFFFF,
-          "state": data.getUint8(4)
+          status: data.getUint8(0),
+          pollTimeout: data.getUint32(1, true) & 0xffffff,
+          state: data.getUint8(4),
         }),
-      error =>
-        Promise.reject("DFU GETSTATUS failed: " + error)
+      (error) => Promise.reject("DFU GETSTATUS failed: " + error)
     );
-  };
+  }
 
   getState() {
     return this.requestIn(dfu.GETSTATE, 1).then(
-      data => Promise.resolve(data.getUint8(0)),
-      error => Promise.reject("DFU GETSTATE failed: " + error)
+      (data) => Promise.resolve(data.getUint8(0)),
+      (error) => Promise.reject("DFU GETSTATE failed: " + error)
     );
-  };
+  }
 
   abort() {
     return this.requestOut(dfu.ABORT);
-  };
+  }
 
   async abortToIdle() {
     await this.abort();
@@ -506,7 +516,7 @@ export class DFU {
     if (state != dfu.dfuIDLE) {
       throw "Failed to return to idle state after abort: state " + state.state;
     }
-  };
+  }
 
   async do_upload(xfer_size, max_size = Infinity, first_block = 0) {
     let transaction = first_block;
@@ -532,7 +542,7 @@ export class DFU {
       } else {
         this.logProgress(bytes_read);
       }
-    } while ((bytes_read < max_size) && (result.byteLength == bytes_to_read));
+    } while (bytes_read < max_size && result.byteLength == bytes_to_read);
 
     if (bytes_read == max_size) {
       await this.abortToIdle();
@@ -540,8 +550,8 @@ export class DFU {
 
     this.logInfo(`Read ${bytes_read} bytes`);
 
-    return new Blob(blocks, {type: "application/octet-stream"});
-  };
+    return new Blob(blocks, { type: "application/octet-stream" });
+  }
 
   async poll_until(state_predicate) {
     let dfu_status = await this.getStatus();
@@ -561,11 +571,11 @@ export class DFU {
     }
 
     return dfu_status;
-  };
+  }
 
   poll_until_idle(idle_state) {
-    return this.poll_until(state => (state == idle_state));
-  };
+    return this.poll_until((state) => state == idle_state);
+  }
 
   async do_download(xfer_size, data, manifestationTolerant) {
     let bytes_sent = 0;
@@ -617,7 +627,7 @@ export class DFU {
       try {
         // Wait until it returns to idle.
         // If it's not really manifestation tolerant, it might transition to MANIFEST_WAIT_RESET
-        dfu_status = await this.poll_until(state => (state == dfu.dfuIDLE || state == dfu.dfuMANIFEST_WAIT_RESET));
+        dfu_status = await this.poll_until((state) => state == dfu.dfuIDLE || state == dfu.dfuMANIFEST_WAIT_RESET);
         if (dfu_status.state == dfu.dfuMANIFEST_WAIT_RESET) {
           this.logDebug("Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant");
         }
@@ -625,8 +635,10 @@ export class DFU {
           throw `DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`;
         }
       } catch (error) {
-        if (error.endsWith("ControlTransferIn failed: NotFoundError: Device unavailable.") ||
-          error.endsWith("ControlTransferIn failed: NotFoundError: The device was disconnected.")) {
+        if (
+          error.endsWith("ControlTransferIn failed: NotFoundError: Device unavailable.") ||
+          error.endsWith("ControlTransferIn failed: NotFoundError: The device was disconnected.")
+        ) {
           this.logWarning("Unable to poll final manifestation status");
         } else {
           throw "Error during DFU manifest: " + error;
@@ -646,9 +658,11 @@ export class DFU {
     try {
       await this.device_.reset();
     } catch (error) {
-      if (error == "NetworkError: Unable to reset the device." ||
+      if (
+        error == "NetworkError: Unable to reset the device." ||
         error == "NotFoundError: Device unavailable." ||
-        error == "NotFoundError: The device was disconnected.") {
+        error == "NotFoundError: The device was disconnected."
+      ) {
         this.logDebug("Ignored reset error");
       } else {
         throw "Error during reset for manifestation: " + error;
@@ -656,5 +670,5 @@ export class DFU {
     }
 
     return;
-  };
+  }
 }

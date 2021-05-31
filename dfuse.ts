@@ -1,4 +1,4 @@
-import { dfu, DFU } from './dfu';
+import { dfu, DFU } from "./dfu";
 
 export type DFUMemorySegment = {
   start: number;
@@ -18,7 +18,7 @@ export const dfuse = {
 
 export class DFUse extends DFU {
   startAddress: number;
-  memoryInfo?: { name: string, segments: DFUMemorySegment[] };
+  memoryInfo?: { name: string; segments: DFUMemorySegment[] };
 
   constructor(...args) {
     super(...args);
@@ -30,7 +30,7 @@ export class DFUse extends DFU {
     }
   }
 
-  parseMemoryDescriptor(desc): { name: string, segments: DFUMemorySegment[] } {
+  parseMemoryDescriptor(desc): { name: string; segments: DFUMemorySegment[] } {
     const nameEndIndex = desc.indexOf("/");
     if (!desc.startsWith("@") || nameEndIndex == -1) {
       throw `Not a DfuSe memory descriptor: "${desc}"`;
@@ -42,22 +42,23 @@ export class DFUse extends DFU {
     let segments = [];
 
     const sectorMultipliers = {
-      ' ': 1,
-      'B': 1,
-      'K': 1024,
-      'M': 1048576
+      " ": 1,
+      B: 1,
+      K: 1024,
+      M: 1048576,
     };
 
-    let contiguousSegmentRegex = /\/\s*(0x[0-9a-fA-F]{1,8})\s*\/(\s*[0-9]+\s*\*\s*[0-9]+\s?[ BKM]\s*[abcdefg]\s*,?\s*)+/g;
+    let contiguousSegmentRegex =
+      /\/\s*(0x[0-9a-fA-F]{1,8})\s*\/(\s*[0-9]+\s*\*\s*[0-9]+\s?[ BKM]\s*[abcdefg]\s*,?\s*)+/g;
     let contiguousSegmentMatch;
-    while (contiguousSegmentMatch = contiguousSegmentRegex.exec(segmentString)) {
+    while ((contiguousSegmentMatch = contiguousSegmentRegex.exec(segmentString))) {
       let segmentRegex = /([0-9]+)\s*\*\s*([0-9]+)\s?([ BKM])\s*([abcdefg])\s*,?\s*/g;
       let startAddress = parseInt(contiguousSegmentMatch[1], 16);
       let segmentMatch;
-      while (segmentMatch = segmentRegex.exec(contiguousSegmentMatch[0])) {
+      while ((segmentMatch = segmentRegex.exec(contiguousSegmentMatch[0]))) {
         let sectorCount = parseInt(segmentMatch[1], 10);
         let sectorSize = parseInt(segmentMatch[2]) * sectorMultipliers[segmentMatch[3]];
-        let properties = segmentMatch[4].charCodeAt(0) - 'a'.charCodeAt(0) + 1;
+        let properties = segmentMatch[4].charCodeAt(0) - "a".charCodeAt(0) + 1;
 
         let segment = {
           start: startAddress,
@@ -67,7 +68,6 @@ export class DFUse extends DFU {
           erasable: (properties & 0x2) != 0,
           writable: (properties & 0x4) != 0,
         };
-
 
         segments.push(segment);
 
@@ -79,7 +79,7 @@ export class DFUse extends DFU {
   }
 
   async dfuseCommand(command, param, len) {
-    if (typeof param === 'undefined' && typeof len === 'undefined') {
+    if (typeof param === "undefined" && typeof len === "undefined") {
       param = 0x00;
       len = 1;
     }
@@ -87,7 +87,7 @@ export class DFUse extends DFU {
     const commandNames = {
       0x00: "GET_COMMANDS",
       0x21: "SET_ADDRESS",
-      0x41: "ERASE_SECTOR"
+      0x41: "ERASE_SECTOR",
     };
 
     let payload = new ArrayBuffer(len + 1);
@@ -107,12 +107,12 @@ export class DFUse extends DFU {
       throw "Error during special DfuSe command " + commandNames[command] + ":" + error;
     }
 
-    let status = await this.poll_until(state => (state != dfu.dfuDNBUSY));
+    let status = await this.poll_until((state) => state != dfu.dfuDNBUSY);
 
     if (status.status != dfu.STATUS_OK) {
       throw "Special DfuSe command " + command + " failed";
     }
-  };
+  }
 
   getSegment(addr) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
@@ -126,10 +126,10 @@ export class DFUse extends DFU {
     }
 
     return null;
-  };
+  }
 
   getSectorStart(addr, segment) {
-    if (typeof segment === 'undefined') {
+    if (typeof segment === "undefined") {
       segment = this.getSegment(addr);
     }
 
@@ -139,10 +139,10 @@ export class DFUse extends DFU {
 
     const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
     return segment.start + sectorIndex * segment.sectorSize;
-  };
+  }
 
   getSectorEnd(addr, segment) {
-    if (typeof segment === 'undefined') {
+    if (typeof segment === "undefined") {
       segment = this.getSegment(addr);
     }
 
@@ -152,7 +152,7 @@ export class DFUse extends DFU {
 
     const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
     return segment.start + (sectorIndex + 1) * segment.sectorSize;
-  };
+  }
 
   getFirstWritableSegment() {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
@@ -166,7 +166,7 @@ export class DFUse extends DFU {
     }
 
     return null;
-  };
+  }
 
   getMaxReadSize(startAddr) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
@@ -185,7 +185,7 @@ export class DFUse extends DFU {
       } else if (segment.start == startAddr + numBytes) {
         // Include a contiguous segment
         if (segment.readable) {
-          numBytes += (segment.end - segment.start);
+          numBytes += segment.end - segment.start;
         } else {
           break;
         }
@@ -193,7 +193,7 @@ export class DFUse extends DFU {
     }
 
     return numBytes;
-  };
+  }
 
   async erase(startAddr, length) {
     let segment = this.getSegment(startAddr);
@@ -225,7 +225,7 @@ export class DFUse extends DFU {
       bytesErased += segment.sectorSize;
       this.logProgress(bytesErased, bytesToErase);
     }
-  };
+  }
 
   async do_download(xfer_size, data, manifestationTolerant) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
@@ -286,7 +286,7 @@ export class DFUse extends DFU {
     }
 
     try {
-      await this.poll_until(state => (state == dfu.dfuMANIFEST));
+      await this.poll_until((state) => state == dfu.dfuMANIFEST);
     } catch (error) {
       this.logError(error);
     }

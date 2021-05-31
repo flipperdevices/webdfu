@@ -42,19 +42,25 @@
     <fieldset>
       <form id="configForm">
         <label for="transferSize">Transfer Size:</label>
-        <input type="number" name="transferSize" id="transferSize" value="1024"/>
+        <input type="number" name="transferSize" id="transferSize" value="1024" />
         <div id="dfuseFields" hidden>
           <label for="dfuseStartAddress">DfuSe Start Address:</label>
-          <input type="text" name="dfuseStartAddress" id="dfuseStartAddress"
-                 title="Initial memory address to read/write from (hex)" size="10" pattern="0x[A-Fa-f0-9]+"/>
+          <input
+            type="text"
+            name="dfuseStartAddress"
+            id="dfuseStartAddress"
+            title="Initial memory address to read/write from (hex)"
+            size="10"
+            pattern="0x[A-Fa-f0-9]+"
+          />
           <label for="dfuseUploadSize">DfuSe Upload Size:</label>
-          <input type="number" name="dfuseUploadSize" id="dfuseUploadSize" min="1"/>
+          <input type="number" name="dfuseUploadSize" id="dfuseUploadSize" min="1" />
         </div>
 
         <fieldset>
           <legend>Firmware Download (write to USB device)</legend>
           <p>
-            <input type="file" id="firmwareFile" name="file" disabled/>
+            <input type="file" id="firmwareFile" name="file" disabled />
           </p>
 
           <p>
