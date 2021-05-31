@@ -1,5 +1,11 @@
-import { dfu, DFU, parseConfigurationDescriptor, findAllDfuInterfaces, findDeviceDfuInterfaces } from "./dfu.ts";
-import { DFUse } from "./dfuse.ts";
+import {
+  dfu,
+  DFU,
+  DFUse,
+  parseConfigurationDescriptor,
+  findAllDfuInterfaces,
+  findDeviceDfuInterfaces,
+} from "../index.ts";
 
 let device = null;
 

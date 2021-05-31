@@ -4,7 +4,7 @@
   "description": "Driver for working with DFU in a browser over Web USB",
   "main": "index.ts",
   "scripts": {
-    "demo": "parcel demo.html",
+    "demo": "parcel demo/index.html",
     "format": "prettier --write *.{html,ts}",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
