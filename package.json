@@ -32,5 +32,8 @@
     "parcel-bundler": "^1.12.5",
     "prettier": "^2.3.0",
     "typescript": "^4.3.2"
+  },
+  "dependencies": {
+    "nanoevents": "^6.0.0"
   }
 }

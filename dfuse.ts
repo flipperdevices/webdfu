@@ -10,11 +10,11 @@ export type DFUMemorySegment = {
   writable: boolean;
 };
 
-export const dfuse = {
-  GET_COMMANDS: 0x00,
-  SET_ADDRESS: 0x21,
-  ERASE_SECTOR: 0x41,
-};
+export enum DFUseCommands {
+  GET_COMMANDS = 0x00,
+  SET_ADDRESS = 0x21,
+  ERASE_SECTOR = 0x41,
+}
 
 export class DFUse extends DFU {
   startAddress: number;
@@ -85,9 +85,9 @@ export class DFUse extends DFU {
     }
 
     const commandNames = {
-      0x00: "GET_COMMANDS",
-      0x21: "SET_ADDRESS",
-      0x41: "ERASE_SECTOR",
+      [DFUseCommands.GET_COMMANDS]: "GET_COMMANDS",
+      [DFUseCommands.SET_ADDRESS]: "SET_ADDRESS",
+      [DFUseCommands.ERASE_SECTOR]: "ERASE_SECTOR",
     };
 
     let payload = new ArrayBuffer(len + 1);
@@ -220,7 +220,7 @@ export class DFUse extends DFU {
       const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
       const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
       this.logDebug(`Erasing ${segment.sectorSize}B at 0x${sectorAddr.toString(16)}`);
-      await this.dfuseCommand(dfuse.ERASE_SECTOR, sectorAddr, 4);
+      await this.dfuseCommand(DFUseCommands.ERASE_SECTOR, sectorAddr, 4);
       addr = sectorAddr + segment.sectorSize;
       bytesErased += segment.sectorSize;
       this.logProgress(bytesErased, bytesToErase);
@@ -256,7 +256,7 @@ export class DFUse extends DFU {
       let bytes_written = 0;
       let dfu_status;
       try {
-        await this.dfuseCommand(dfuse.SET_ADDRESS, address, 4);
+        await this.dfuseCommand(DFUseCommands.SET_ADDRESS, address, 4);
         this.logDebug(`Set address to 0x${address.toString(16)}`);
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
         this.logDebug("Sent " + bytes_written + " bytes");
@@ -279,7 +279,7 @@ export class DFUse extends DFU {
 
     this.logInfo("Manifesting new firmware");
     try {
-      await this.dfuseCommand(dfuse.SET_ADDRESS, startAddress, 4);
+      await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
       await this.download(new ArrayBuffer(0), 0);
     } catch (error) {
       throw "Error during DfuSe manifestation: " + error;
@@ -306,7 +306,7 @@ export class DFUse extends DFU {
     if (state != dfu.dfuIDLE) {
       await this.abortToIdle();
     }
-    await this.dfuseCommand(dfuse.SET_ADDRESS, startAddress, 4);
+    await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
     await this.abortToIdle();
 
     // DfuSe encodes the read address based on the transfer size,

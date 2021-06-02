@@ -1,3 +1,5 @@
+import {WebDFUInterface} from "./index";
+
 export const dfu = {
   DETACH: 0x00,
   DNLOAD: 0x01,
@@ -128,75 +130,20 @@ export function parseSubDescriptors(descriptorData) {
   return descriptors;
 }
 
-export function findDeviceDfuInterfaces(device) {
-  let interfaces = [];
-
-  for (let conf of device.configurations) {
-    for (let intf of conf.interfaces) {
-      for (let alt of intf.alternates) {
-        if (
-          alt.interfaceClass == 0xfe &&
-          alt.interfaceSubclass == 0x01 &&
-          (alt.interfaceProtocol == 0x01 || alt.interfaceProtocol == 0x02)
-        ) {
-          interfaces.push({
-            configuration: conf,
-            interface: intf,
-            alternate: alt,
-            name: alt.interfaceName,
-          });
-        }
-      }
-    }
-  }
-
-  return interfaces;
-}
-
-export function findAllDfuInterfaces() {
-  return navigator.usb.getDevices().then((devices) => {
-    let matches = [];
-    for (let device of devices) {
-      let interfaces = findDeviceDfuInterfaces(device);
-      for (let interface_ of interfaces) {
-        matches.push(new DFU(device, interface_));
-      }
-    }
-    return matches;
-  });
-}
-
 export class DFU {
-  constructor(public device_: USBDevice, public settings: USBInterface) {}
+  constructor(public device_: USBDevice, public settings: WebDFUInterface) {}
 
   get intfNumber(): number {
     return this.settings["interface"].interfaceNumber;
   }
 
   logDebug(msg) {}
-
-  logInfo(msg) {
-    console.log(msg);
-  }
-
-  logWarning(msg) {
-    console.warn(msg);
-  }
-
-  logError(msg) {
-    console.error(msg);
-  }
-
-  logProgress(done, total) {
-    if (typeof total === "undefined") {
-      console.log(done);
-    } else {
-      console.log(done + "/" + total);
-    }
-  }
+  logInfo(msg) {}
+  logWarning(msg) {}
+  logError(msg) {}
+  logProgress(done, total) {}
 
   async open() {
-    await this.device_.open();
     const confValue = this.settings.configuration.configurationValue;
     if (this.device_.configuration === null || this.device_.configuration.configurationValue != confValue) {
       await this.device_.selectConfiguration(confValue);
@@ -212,173 +159,6 @@ export class DFU {
     if (intf.alternate === null || intf.alternate.alternateSetting != altSetting) {
       await this.device_.selectAlternateInterface(intfNumber, altSetting);
     }
-  }
-
-  async close() {
-    try {
-      await this.device_.close();
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  readDeviceDescriptor() {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_DEVICE = 0x01;
-    const wValue = DT_DEVICE << 8;
-
-    return this.device_
-      .controlTransferIn(
-        {
-          requestType: "standard",
-          recipient: "device",
-          request: GET_DESCRIPTOR,
-          value: wValue,
-          index: 0,
-        },
-        18
-      )
-      .then((result) => {
-        if (result.status == "ok") {
-          return Promise.resolve(result.data);
-        } else {
-          return Promise.reject(result.status);
-        }
-      });
-  }
-
-  async readStringDescriptor(index, langID) {
-    if (typeof langID === "undefined") {
-      langID = 0;
-    }
-
-    const GET_DESCRIPTOR = 0x06;
-    const DT_STRING = 0x03;
-    const wValue = (DT_STRING << 8) | index;
-
-    const request_setup = {
-      requestType: "standard",
-      recipient: "device",
-      request: GET_DESCRIPTOR,
-      value: wValue,
-      index: langID,
-    };
-
-    // Read enough for bLength
-    var result = await this.device_.controlTransferIn(request_setup, 1);
-
-    if (result.status == "ok") {
-      // Retrieve the full descriptor
-      const bLength = result.data.getUint8(0);
-      result = await this.device_.controlTransferIn(request_setup, bLength);
-      if (result.status == "ok") {
-        const len = (bLength - 2) / 2;
-        let u16_words = [];
-        for (let i = 0; i < len; i++) {
-          u16_words.push(result.data.getUint16(2 + i * 2, true));
-        }
-        if (langID == 0) {
-          // Return the langID array
-          return u16_words;
-        } else {
-          // Decode from UCS-2 into a string
-          return String.fromCharCode.apply(String, u16_words);
-        }
-      }
-    }
-
-    throw `Failed to read string descriptor ${index}: ${result.status}`;
-  }
-
-  async readInterfaceNames() {
-    const DT_INTERFACE = 4;
-
-    let configs = {};
-    let allStringIndices = new Set();
-    for (let configIndex = 0; configIndex < this.device_.configurations.length; configIndex++) {
-      const rawConfig = await this.readConfigurationDescriptor(configIndex);
-      let configDesc = parseConfigurationDescriptor(rawConfig);
-      let configValue = configDesc.bConfigurationValue;
-      configs[configValue] = {};
-
-      // Retrieve string indices for interface names
-      for (let desc of configDesc.descriptors) {
-        if (desc.bDescriptorType == DT_INTERFACE) {
-          if (!(desc.bInterfaceNumber in configs[configValue])) {
-            configs[configValue][desc.bInterfaceNumber] = {};
-          }
-          configs[configValue][desc.bInterfaceNumber][desc.bAlternateSetting] = desc.iInterface;
-          if (desc.iInterface > 0) {
-            allStringIndices.add(desc.iInterface);
-          }
-        }
-      }
-    }
-
-    let strings = {};
-    // Retrieve interface name strings
-    for (let index of allStringIndices) {
-      try {
-        strings[index] = await this.readStringDescriptor(index, 0x0409);
-      } catch (error) {
-        console.log(error);
-        strings[index] = null;
-      }
-    }
-
-    for (let configValue in configs) {
-      for (let intfNumber in configs[configValue]) {
-        for (let alt in configs[configValue][intfNumber]) {
-          const iIndex = configs[configValue][intfNumber][alt];
-          configs[configValue][intfNumber][alt] = strings[iIndex];
-        }
-      }
-    }
-
-    return configs;
-  }
-
-  readConfigurationDescriptor(index) {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_CONFIGURATION = 0x02;
-    const wValue = (DT_CONFIGURATION << 8) | index;
-
-    return this.device_
-      .controlTransferIn(
-        {
-          requestType: "standard",
-          recipient: "device",
-          request: GET_DESCRIPTOR,
-          value: wValue,
-          index: 0,
-        },
-        4
-      )
-      .then((result) => {
-        if (result.status == "ok") {
-          // Read out length of the configuration descriptor
-          let wLength = result.data.getUint16(2, true);
-          return this.device_.controlTransferIn(
-            {
-              requestType: "standard",
-              recipient: "device",
-              request: GET_DESCRIPTOR,
-              value: wValue,
-              index: 0,
-            },
-            wLength
-          );
-        } else {
-          return Promise.reject(result.status);
-        }
-      })
-      .then((result) => {
-        if (result.status == "ok") {
-          return Promise.resolve(result.data);
-        } else {
-          return Promise.reject(result.status);
-        }
-      });
   }
 
   requestOut(bRequest, data, wValue = 0) {
