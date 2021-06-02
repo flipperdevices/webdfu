@@ -1,6 +1,6 @@
-import {dfu, DFU, DFUse, WebDFU, WebDFUType,} from "../index.ts";
+import { dfu, DFU, DFUse, WebDFU, WebDFUType } from "../index.ts";
 
-import {clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext} from "./log";
+import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
 // Utils
 function hex4(n) {
@@ -56,24 +56,7 @@ function formatDFUSummary(device: DFU) {
   return `${mode}: [${vid}:${pid}] cfg=${cfg}, intf=${intf}, alt=${alt}, name="${name}" serial="${serial}"`;
 }
 
-function formatDFUInterfaceAlternate(settings) {
-  let mode = "Unknown";
-  if (settings.alternate.interfaceProtocol == 0x01) {
-    mode = "Runtime";
-  } else if (settings.alternate.interfaceProtocol == 0x02) {
-    mode = "DFU";
-  }
-
-  const cfg = settings.configuration.configurationValue;
-  const intf = settings["interface"].interfaceNumber;
-  const alt = settings.alternate.alternateSetting;
-  const name = settings.name ? settings.name : "UNKNOWN";
-
-  return `${mode}: cfg=${cfg}, intf=${intf}, alt=${alt}, name="${name}"`;
-}
-
 // Current page
-let device = null;
 let webdfu: WebDFU | null = null;
 
 let connectButton = document.querySelector("#connect") as HTMLButtonElement;
@@ -83,8 +66,6 @@ let uploadButton = document.querySelector("#upload") as HTMLButtonElement;
 let statusDisplay = document.querySelector("#status") as HTMLDivElement;
 let infoDisplay = document.querySelector("#usbInfo") as HTMLDivElement;
 let dfuDisplay = document.querySelector("#dfuInfo") as HTMLDivElement;
-let interfaceDialog = document.querySelector("#interfaceDialog") as HTMLDialogElement;
-let interfaceForm = document.querySelector("#interfaceForm") as HTMLFormElement;
 
 let configForm = document.querySelector("#configForm") as HTMLFormElement;
 
@@ -127,7 +108,7 @@ function onUnexpectedDisconnect(event) {
 
 async function connect(interfaceIndex: number) {
   if (!webdfu) {
-    throw new Error()
+    throw new Error();
   }
 
   await webdfu.connect(interfaceIndex);
@@ -147,10 +128,10 @@ async function connect(interfaceIndex: number) {
       `CanDownload=${webdfu.properties.CanDnload}`,
       `TransferSize=${webdfu.properties.TransferSize}`,
       `DetachTimeOut=${webdfu.properties.DetachTimeOut}`,
-      `Version=${hex4(webdfu.properties.DFUVersion)}`
+      `Version=${hex4(webdfu.properties.DFUVersion)}`,
     ];
 
-    dfuDisplay.textContent += "\n" + info.join(', ');
+    dfuDisplay.textContent += "\n" + info.join(", ");
     transferSizeField.value = webdfu.properties.TransferSize.toString();
     transferSize = webdfu.properties.TransferSize;
 
@@ -272,10 +253,12 @@ dfuseStartAddressField.addEventListener("change", function (event) {
   if (isNaN(address)) {
     field.setCustomValidity("Invalid hexadecimal start address");
   } else if (webdfu?.dfu && webdfu.dfu instanceof DFUse && webdfu?.dfu?.memoryInfo) {
-    if (device.getSegment(address) !== null) {
-      device.startAddress = address;
+    if (webdfu?.dfu.getSegment(address) !== null) {
+      webdfu?.dfu.startAddress = address;
       field.setCustomValidity("");
-      dfuseUploadSizeField.max = device.getMaxReadSize(address);
+      if (webdfu?.dfu && webdfu?.dfu instanceof DFUse) {
+        dfuseUploadSizeField.max = webdfu.dfu.getMaxReadSize(address).toString();
+      }
     } else {
       field.setCustomValidity("Address outside of memory map");
     }
@@ -293,42 +276,19 @@ connectButton.addEventListener("click", function () {
   }
 
   navigator.usb
-    .requestDevice({filters: []})
+    .requestDevice({ filters: [] })
     .then(async (selectedDevice) => {
       webdfu = new WebDFU(selectedDevice, { forceInterfacesName: true });
-      webdfu.events.on('disconnect', onDisconnect);
+      webdfu.events.on("disconnect", onDisconnect);
 
       await webdfu.init();
 
       if (webdfu.interfaces.length == 0) {
-        console.log(selectedDevice);
         statusDisplay.textContent = "The selected device does not have any USB DFU interfaces.";
         return;
       }
 
-      if (webdfu.interfaces.length === 1) {
-        device = await connect(0);
-        return;
-      }
-
-      interfaceForm.querySelectorAll("div").forEach(div => interfaceForm.removeChild(div));
-      interfaceForm.insertAdjacentHTML(
-        'afterbegin',
-        webdfu.interfaces
-          .map((inf, i) => `
-            <div>
-              <input type="radio" id="interface${i}" name="interfaceIndex" value="${i}" required>
-              <label class="radio" for="interface${i}">${formatDFUInterfaceAlternate(inf)}</label>
-            </div>
-          `)
-          .join('')
-      );
-
-      interfaceForm.addEventListener("submit", async function connectToSelectedInterface() {
-        device = await connect(interfaceForm.elements["interfaceIndex"].value);
-      }, { once: true });
-
-      interfaceDialog.showModal();
+      await connect(0);
     })
     .catch((error) => {
       statusDisplay.textContent = error;
@@ -336,25 +296,25 @@ connectButton.addEventListener("click", function () {
 });
 
 detachButton.addEventListener("click", function () {
-  if (device) {
-    device.detach().then(
+  if (webdfu?.dfu) {
+    webdfu?.dfu.detach().then(
       async (len) => {
         let detached = false;
         try {
-          await device.close();
-          await device.waitDisconnected(5000);
+          await webdfu?.close();
+          await webdfu?.dfu?.waitDisconnected(5000);
           detached = true;
         } catch (err) {
           console.log("Detach failed: " + err);
         }
 
         onDisconnect();
-        device = null;
+        webdfu = null;
       },
       async (error) => {
-        await device.close();
+        await webdfu?.close();
         onDisconnect(error);
-        device = null;
+        webdfu = null;
       }
     );
   }
@@ -368,19 +328,19 @@ uploadButton.addEventListener("click", async function (event) {
     return false;
   }
 
-  if (!device || !device.device_.opened) {
+  if (!webdfu?.dfu || !webdfu?.dfu.device_.opened) {
     onDisconnect();
-    device = null;
+    webdfu = null;
   } else {
     setLogContext(uploadLog);
     clearLog(uploadLog);
     try {
-      let status = await device.getStatus();
+      let status = await webdfu?.dfu.getStatus();
       if (status.state == dfu.dfuERROR) {
-        await device.clearStatus();
+        await webdfu?.dfu.clearStatus();
       }
     } catch (error) {
-      device.logWarning("Failed to clear status");
+      webdfu?.dfu.logWarning("Failed to clear status");
     }
 
     let maxSize = Infinity;
@@ -389,7 +349,7 @@ uploadButton.addEventListener("click", async function (event) {
     }
 
     try {
-      const blob = await device.do_upload(transferSize, maxSize);
+      const blob = await webdfu?.dfu.do_upload(transferSize, maxSize);
 
       // Global function in FileSaver.js
       // @ts-ignore
@@ -425,29 +385,29 @@ downloadButton.addEventListener("click", async function (event) {
     return false;
   }
 
-  if (device && firmwareFile != null) {
+  if (webdfu?.dfu && firmwareFile != null) {
     setLogContext(downloadLog);
     clearLog(downloadLog);
 
     try {
-      let status = await device.getStatus();
+      let status = await webdfu?.dfu.getStatus();
 
       if (status.state == dfu.dfuERROR) {
-        await device.clearStatus();
+        await webdfu?.dfu.clearStatus();
       }
     } catch (error) {
-      device.logWarning("Failed to clear status");
+      webdfu?.dfu.logWarning("Failed to clear status");
     }
 
     try {
-      await device.do_download(transferSize, firmwareFile, manifestationTolerant);
+      await webdfu?.dfu.do_download(transferSize, firmwareFile, manifestationTolerant);
 
       logInfo("Done!");
       setLogContext(null);
 
       if (!manifestationTolerant) {
         try {
-          await device.waitDisconnected(5000);
+          await webdfu?.dfu.waitDisconnected(5000);
 
           onDisconnect();
           webdfu = null;

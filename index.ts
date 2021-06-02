@@ -1,32 +1,32 @@
-import {createNanoEvents} from "nanoevents";
-import {DFU, parseConfigurationDescriptor} from "./dfu";
-import {DFUse} from "./dfuse";
+import { createNanoEvents } from "nanoevents";
+import { DFU, parseConfigurationDescriptor } from "./dfu";
+import { DFUse } from "./dfuse";
 
 export type WebDFUInterface = {
-  name?: string,
-  configuration: USBConfiguration,
-  interface: USBInterface,
-  alternate: USBAlternateInterface,
-}
+  name?: string;
+  configuration: USBConfiguration;
+  interface: USBInterface;
+  alternate: USBAlternateInterface;
+};
 
 export type WebDFUEvent = {
   init: () => void;
   connect: () => void;
   disconnect: (error?: Error) => void;
-}
+};
 
 export type WebDFUOptions = {
   forceInterfacesName?: boolean;
 };
 
 export type WebDFUProperties = {
-  WillDetach: boolean,
-  ManifestationTolerant: boolean,
-  CanUpload: boolean,
-  CanDnload: boolean,
-  TransferSize: number,
-  DetachTimeOut: number,
-  DFUVersion: number,
+  WillDetach: boolean;
+  ManifestationTolerant: boolean;
+  CanUpload: boolean;
+  CanDnload: boolean;
+  TransferSize: number;
+  DetachTimeOut: number;
+  DFUVersion: number;
 };
 
 export enum WebDFUType {
@@ -41,10 +41,7 @@ export class WebDFU {
   dfu?: DFU | DFUse;
   properties?: WebDFUProperties;
 
-  constructor(
-    public readonly device: USBDevice,
-    public readonly settings: WebDFUOptions = {}
-  ) {}
+  constructor(public readonly device: USBDevice, public readonly settings: WebDFUOptions = {}) {}
 
   get type(): WebDFUType {
     if (this.properties?.DFUVersion == 0x011a && this.dfu?.settings.alternate.interfaceProtocol == 0x02) {
@@ -57,7 +54,7 @@ export class WebDFU {
   async init() {
     this.interfaces = await this.findDfuInterfaces();
 
-    this.events.emit('init');
+    this.events.emit("init");
   }
 
   async connect(interfaceIndex: number) {
@@ -70,7 +67,7 @@ export class WebDFU {
     try {
       desc = await this.getDFUDescriptorProperties();
     } catch (error) {
-      this.events.emit('disconnect', error);
+      this.events.emit("disconnect", error);
       throw error;
     }
 
@@ -87,16 +84,16 @@ export class WebDFU {
     try {
       await this.dfu.open();
     } catch (error) {
-      this.events.emit('disconnect', error);
+      this.events.emit("disconnect", error);
       throw error;
     }
 
-    this.events.emit('connect');
+    this.events.emit("connect");
   }
 
   async close() {
     await this.device.close();
-    this.events.emit('disconnect');
+    this.events.emit("disconnect");
   }
 
   // Attempt to read the DFU functional descriptor
@@ -155,7 +152,7 @@ export class WebDFU {
 
     if (this.settings.forceInterfacesName) {
       // Need force
-      await this.fixInterfaceNames(interfaces)
+      await this.fixInterfaceNames(interfaces);
     }
 
     return interfaces;
@@ -224,13 +221,16 @@ export class WebDFU {
     const DT_DEVICE = 0x01;
     const wValue = DT_DEVICE << 8;
 
-    const result = await this.device.controlTransferIn({
-      requestType: "standard",
-      recipient: "device",
-      request: GET_DESCRIPTOR,
-      value: wValue,
-      index: 0,
-    }, 18);
+    const result = await this.device.controlTransferIn(
+      {
+        requestType: "standard",
+        recipient: "device",
+        request: GET_DESCRIPTOR,
+        value: wValue,
+        index: 0,
+      },
+      18
+    );
 
     if (!result.data || result.status !== "ok") {
       throw `Failed to read device descriptor: ${result.status}`;
@@ -300,7 +300,7 @@ export class WebDFU {
       index: 0,
     };
 
-    const descriptorSize = await this.device.controlTransferIn(setup, 4)
+    const descriptorSize = await this.device.controlTransferIn(setup, 4);
 
     if (!descriptorSize.data || descriptorSize.status !== "ok") {
       throw new Error(`controlTransferIn error. [status]: ${descriptorSize.status}`);

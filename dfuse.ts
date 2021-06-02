@@ -1,6 +1,6 @@
 import { dfu, DFU } from "./dfu";
 
-export type DFUMemorySegment = {
+export type DFUseMemorySegment = {
   start: number;
   end: number;
   sectorSize: number;
@@ -17,20 +17,18 @@ export enum DFUseCommands {
 }
 
 export class DFUse extends DFU {
-  startAddress: number;
-  memoryInfo?: { name: string; segments: DFUMemorySegment[] };
+  startAddress: number = NaN;
+  memoryInfo?: { name: string; segments: DFUseMemorySegment[] };
 
   constructor(...args) {
     super(...args);
-
-    this.startAddress = NaN;
 
     if (this.settings.name) {
       this.memoryInfo = this.parseMemoryDescriptor(this.settings.name);
     }
   }
 
-  parseMemoryDescriptor(desc): { name: string; segments: DFUMemorySegment[] } {
+  parseMemoryDescriptor(desc): { name: string; segments: DFUseMemorySegment[] } {
     const nameEndIndex = desc.indexOf("/");
     if (!desc.startsWith("@") || nameEndIndex == -1) {
       throw `Not a DfuSe memory descriptor: "${desc}"`;

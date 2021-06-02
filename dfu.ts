@@ -1,4 +1,4 @@
-import {WebDFUInterface} from "./index";
+import { WebDFUInterface } from "./index";
 
 export const dfu = {
   DETACH: 0x00,
