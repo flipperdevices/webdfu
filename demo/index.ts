@@ -60,7 +60,6 @@ function formatDFUSummary(device: DFU) {
 let webdfu: WebDFU | null = null;
 
 let connectButton = document.querySelector("#connect") as HTMLButtonElement;
-let detachButton = document.querySelector("#detach") as HTMLButtonElement;
 let downloadButton = document.querySelector("#download") as HTMLButtonElement;
 let uploadButton = document.querySelector("#upload") as HTMLButtonElement;
 let statusDisplay = document.querySelector("#status") as HTMLDivElement;
@@ -91,7 +90,6 @@ function onDisconnect(reason?: Error) {
   connectButton.textContent = "Connect";
   infoDisplay.textContent = "";
   dfuDisplay.textContent = "";
-  detachButton.disabled = true;
   uploadButton.disabled = false;
   downloadButton.disabled = true;
   firmwareFileField.disabled = true;
@@ -208,13 +206,11 @@ async function connect(interfaceIndex: number) {
   // Update buttons based on capabilities
   if (webdfu.dfu?.settings.alternate.interfaceProtocol == 0x01) {
     // Runtime
-    detachButton.disabled = false;
     uploadButton.disabled = false;
     downloadButton.disabled = true;
     firmwareFileField.disabled = true;
   } else {
     // DFU
-    detachButton.disabled = true;
     uploadButton.disabled = false;
     downloadButton.disabled = false;
     firmwareFileField.disabled = false;
@@ -293,31 +289,6 @@ connectButton.addEventListener("click", function () {
     .catch((error) => {
       statusDisplay.textContent = error;
     });
-});
-
-detachButton.addEventListener("click", function () {
-  if (webdfu?.dfu) {
-    webdfu?.dfu.detach().then(
-      async (len) => {
-        let detached = false;
-        try {
-          await webdfu?.close();
-          await webdfu?.dfu?.waitDisconnected(5000);
-          detached = true;
-        } catch (err) {
-          console.log("Detach failed: " + err);
-        }
-
-        onDisconnect();
-        webdfu = null;
-      },
-      async (error) => {
-        await webdfu?.close();
-        onDisconnect(error);
-        webdfu = null;
-      }
-    );
-  }
 });
 
 uploadButton.addEventListener("click", async function (event) {
