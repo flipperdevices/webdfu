@@ -1,6 +1,6 @@
 {
   "name": "dfu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Driver for working with DFU in a browser over Web USB",
   "main": "dist/index.js",
   "files": ["dist", "package.json", "package-lock.json", "readme.md"],
