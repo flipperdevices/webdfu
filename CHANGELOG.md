@@ -6,6 +6,6 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 - Add the readme and changelog
 
-## 0.1
+## 0.1.0
 
 - Initial release.
