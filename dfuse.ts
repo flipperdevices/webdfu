@@ -20,8 +20,8 @@ export class DFUse extends DFU {
   startAddress: number = NaN;
   memoryInfo?: { name: string; segments: DFUseMemorySegment[] };
 
-  constructor(...args) {
-    super(...args);
+  constructor(device, settings) {
+    super(device, settings);
 
     if (this.settings.name) {
       this.memoryInfo = this.parseMemoryDescriptor(this.settings.name);
@@ -139,11 +139,7 @@ export class DFUse extends DFU {
     return segment.start + sectorIndex * segment.sectorSize;
   }
 
-  getSectorEnd(addr, segment) {
-    if (typeof segment === "undefined") {
-      segment = this.getSegment(addr);
-    }
-
+  getSectorEnd(addr, segment = this.getSegment(addr)) {
     if (!segment) {
       throw `Address ${addr.toString(16)} outside of memory map`;
     }
@@ -208,6 +204,7 @@ export class DFUse extends DFU {
       if (segment.end <= addr) {
         segment = this.getSegment(addr);
       }
+
       if (!segment.erasable) {
         // Skip over the non-erasable section
         bytesErased = Math.min(bytesErased + segment.end - addr, bytesToErase);
@@ -215,6 +212,7 @@ export class DFUse extends DFU {
         this.logProgress(bytesErased, bytesToErase);
         continue;
       }
+
       const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
       const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
       this.logDebug(`Erasing ${segment.sectorSize}B at 0x${sectorAddr.toString(16)}`);

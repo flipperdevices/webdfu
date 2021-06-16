@@ -1,4 +1,4 @@
-import { dfu, DFU, DFUse, WebDFU, WebDFUType } from "../index.ts";
+import { dfu, DFU, DFUse, WebDFU, WebDFUType } from "../index";
 
 import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
@@ -250,7 +250,7 @@ dfuseStartAddressField.addEventListener("change", function (event) {
     field.setCustomValidity("Invalid hexadecimal start address");
   } else if (webdfu?.dfu && webdfu.dfu instanceof DFUse && webdfu?.dfu?.memoryInfo) {
     if (webdfu?.dfu.getSegment(address) !== null) {
-      webdfu?.dfu.startAddress = address;
+      webdfu.dfu.startAddress = address;
       field.setCustomValidity("");
       if (webdfu?.dfu && webdfu?.dfu instanceof DFUse) {
         dfuseUploadSizeField.max = webdfu.dfu.getMaxReadSize(address).toString();

@@ -1,6 +1,6 @@
 import { WebDFUInterface } from "./index";
 
-export const dfu = {
+export const dfu: Record<string, number> = {
   DETACH: 0x00,
   DNLOAD: 0x01,
   UPLOAD: 0x02,
@@ -131,6 +131,8 @@ export function parseSubDescriptors(descriptorData) {
 }
 
 export class DFU {
+  disconnected: boolean;
+
   constructor(public device_: USBDevice, public settings: WebDFUInterface) {}
 
   get intfNumber(): number {
@@ -141,7 +143,7 @@ export class DFU {
   logInfo(msg) {}
   logWarning(msg) {}
   logError(msg) {}
-  logProgress(done, total) {}
+  logProgress(done: number, total?: number) {}
 
   async open() {
     const confValue = this.settings.configuration.configurationValue;
@@ -161,7 +163,7 @@ export class DFU {
     }
   }
 
-  requestOut(bRequest, data, wValue = 0) {
+  requestOut(bRequest: number, data?: BufferSource, wValue = 0) {
     return this.device_
       .controlTransferOut(
         {
@@ -220,7 +222,8 @@ export class DFU {
   async waitDisconnected(timeout) {
     let device = this;
     let usbDevice = this.device_;
-    return new Promise(function (resolve, reject) {
+
+    return new Promise((resolve, reject) => {
       let timeoutID;
 
       if (timeout > 0) {
@@ -294,7 +297,7 @@ export class DFU {
       state = await this.getState();
     }
     if (state != dfu.dfuIDLE) {
-      throw "Failed to return to idle state after abort: state " + state.state;
+      throw "Failed to return to idle state after abort: state " + state;
     }
   }
 

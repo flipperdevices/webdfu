@@ -4,9 +4,11 @@
   "description": "Driver for working with DFU in a browser over Web USB",
   "main": "index.ts",
   "scripts": {
+    "clear": "rm -rf .cache dist tsconfig.tsbuildinfo",
     "demo": "parcel demo/index.html",
     "format": "prettier --write .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:types": "tsc --build tsconfig.json",
+    "test": "npm run test:types"
   },
   "repository": {
     "type": "git",

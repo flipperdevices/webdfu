@@ -243,7 +243,7 @@ export class WebDFU {
     const DT_INTERFACE = 4;
 
     let configs = {};
-    let allStringIndices = new Set();
+    let allStringIndices = new Set<any>();
     for (let configIndex = 0; configIndex < this.device.configurations.length; configIndex++) {
       const rawConfig = await this.readConfigurationDescriptor(configIndex);
       let configDesc = parseConfigurationDescriptor(rawConfig);
@@ -264,7 +264,7 @@ export class WebDFU {
       }
     }
 
-    let strings = {};
+    let strings: any = {};
     // Retrieve interface name strings
     for (let index of allStringIndices) {
       try {
@@ -319,5 +319,5 @@ export class WebDFU {
   }
 }
 
-export * from "./dfu.ts";
-export * from "./dfuse.ts";
+export * from "./dfu";
+export * from "./dfuse";

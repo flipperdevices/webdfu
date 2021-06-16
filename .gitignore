@@ -4,6 +4,9 @@
 # Deps
 node_modules
 
+# Build
+tsconfig.tsbuildinfo
+
 # Demo
 dist
 .cache
