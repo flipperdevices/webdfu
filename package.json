@@ -16,7 +16,6 @@
     "package-lock.json"
   ],
   "scripts": {
-    "prepublish": "npm-s test build",
     "build": "rollup -c rollup.config.js",
     "format": "prettier --check .",
     "lint": "eslint **/*.ts",
