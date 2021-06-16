@@ -2,15 +2,10 @@ import ts from "rollup-plugin-ts";
 import { terser } from "rollup-plugin-terser";
 
 export default {
-  input: './index.ts',
+  input: "./index.ts",
   output: {
-    file: './dist/index.js',
-    format: 'cjs'
+    file: "./dist/index.js",
+    format: "cjs",
   },
-  plugins: [
-    ts({
-      declaration: true
-    }),
-    terser({}),
-  ]
+  plugins: [ts({}), terser({})],
 };

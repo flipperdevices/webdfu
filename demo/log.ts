@@ -19,7 +19,7 @@ export function logDebug(msg) {
 
 export function logInfo(msg) {
   if (logContext) {
-    let info = document.createElement("p");
+    const info = document.createElement("p");
     info.className = "info";
     info.textContent = msg;
     logContext.appendChild(info);
@@ -28,7 +28,7 @@ export function logInfo(msg) {
 
 export function logWarning(msg) {
   if (logContext) {
-    let warning = document.createElement("p");
+    const warning = document.createElement("p");
     warning.className = "warning";
     warning.textContent = msg;
     logContext.appendChild(warning);
@@ -37,7 +37,7 @@ export function logWarning(msg) {
 
 export function logError(msg) {
   if (logContext) {
-    let error = document.createElement("p");
+    const error = document.createElement("p");
     error.className = "error";
     error.textContent = msg;
     logContext.appendChild(error);

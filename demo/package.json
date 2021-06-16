@@ -1,0 +1,17 @@
+{
+  "name": "@dfu/demo",
+  "scripts": {
+    "start": "parcel index.html --open chrome"
+  },
+  "devDependencies": {
+    "@types/file-saver": "^2.0.2",
+    "parcel": "^2.0.0-beta.2"
+  },
+  "dependencies": {
+    "dfu": "../",
+    "file-saver": "^2.0.5"
+  },
+  "browserslist": [
+    "last 1 Chrome version"
+  ]
+}

@@ -2,15 +2,16 @@
 
 ## Install
 
- ```shell
+```shell
 npm i dfu
- ```
+```
 
 ## Usage
 
 Full example in: [webdfu/demo](https://github.com/Flipper-Zero/webdfu/tree/main/demo)
 
 Basic example:
+
 ```javascript
 async function connect() {
   // Load the device by WebUSB
@@ -36,7 +37,7 @@ async function connect() {
   });
 
   // Your firmware in binary mode
-  const firmwareFile = new ArrayBuffer('' /* Your firmware */);
+  const firmwareFile = new ArrayBuffer("");
   await webdfu?.dfu.do_download(1024, firmwareFile, true);
 
   console.log("Done!");

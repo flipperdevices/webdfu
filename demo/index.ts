@@ -1,3 +1,5 @@
+import { saveAs } from "file-saver";
+
 import { dfu, DFU, DFUse, WebDFU, WebDFUType } from "../index";
 
 import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
@@ -59,26 +61,26 @@ function formatDFUSummary(device: DFU) {
 // Current page
 let webdfu: WebDFU | null = null;
 
-let connectButton = document.querySelector("#connect") as HTMLButtonElement;
-let downloadButton = document.querySelector("#download") as HTMLButtonElement;
-let uploadButton = document.querySelector("#upload") as HTMLButtonElement;
-let statusDisplay = document.querySelector("#status") as HTMLDivElement;
-let infoDisplay = document.querySelector("#usbInfo") as HTMLDivElement;
-let dfuDisplay = document.querySelector("#dfuInfo") as HTMLDivElement;
+const connectButton = document.querySelector("#connect") as HTMLButtonElement;
+const downloadButton = document.querySelector("#download") as HTMLButtonElement;
+const uploadButton = document.querySelector("#upload") as HTMLButtonElement;
+const statusDisplay = document.querySelector("#status") as HTMLDivElement;
+const infoDisplay = document.querySelector("#usbInfo") as HTMLDivElement;
+const dfuDisplay = document.querySelector("#dfuInfo") as HTMLDivElement;
 
-let configForm = document.querySelector("#configForm") as HTMLFormElement;
+const configForm = document.querySelector("#configForm") as HTMLFormElement;
 
-let transferSizeField = document.querySelector("#transferSize") as HTMLInputElement;
+const transferSizeField = document.querySelector("#transferSize") as HTMLInputElement;
 let transferSize = parseInt(transferSizeField.value);
 
-let dfuseStartAddressField = document.querySelector("#dfuseStartAddress") as HTMLInputElement;
-let dfuseUploadSizeField = document.querySelector("#dfuseUploadSize") as HTMLInputElement;
+const dfuseStartAddressField = document.querySelector("#dfuseStartAddress") as HTMLInputElement;
+const dfuseUploadSizeField = document.querySelector("#dfuseUploadSize") as HTMLInputElement;
 
-let firmwareFileField = document.querySelector("#firmwareFile") as HTMLInputElement;
+const firmwareFileField = document.querySelector("#firmwareFile") as HTMLInputElement;
 let firmwareFile = null;
 
-let downloadLog = document.querySelector("#downloadLog") as HTMLDivElement;
-let uploadLog = document.querySelector("#uploadLog") as HTMLDivElement;
+const downloadLog = document.querySelector("#downloadLog") as HTMLDivElement;
+const uploadLog = document.querySelector("#uploadLog") as HTMLDivElement;
 
 let manifestationTolerant = true;
 
@@ -119,7 +121,7 @@ async function connect(interfaceIndex: number) {
   if (webdfu.properties) {
     const desc = webdfu.properties;
 
-    let info = [
+    const info = [
       `WillDetach=${webdfu.properties.WillDetach}`,
       `ManifestationTolerant=${webdfu.properties.ManifestationTolerant}`,
       `CanUpload=${webdfu.properties.CanUpload}`,
@@ -151,12 +153,12 @@ async function connect(interfaceIndex: number) {
     if (webdfu.type === WebDFUType.SDFUse && webdfu.dfu instanceof DFUse) {
       if (webdfu.dfu.memoryInfo) {
         let totalSize = 0;
-        for (let segment of webdfu.dfu.memoryInfo.segments) {
+        for (const segment of webdfu.dfu.memoryInfo.segments) {
           totalSize += segment.end - segment.start;
         }
         memorySummary = `Selected memory region: ${webdfu.dfu.memoryInfo.name} (${niceSize(totalSize)})`;
-        for (let segment of webdfu.dfu.memoryInfo.segments) {
-          let properties = [];
+        for (const segment of webdfu.dfu.memoryInfo.segments) {
+          const properties = [];
           if (segment.readable) {
             properties.push("readable");
           }
@@ -217,11 +219,11 @@ async function connect(interfaceIndex: number) {
   }
 
   if (webdfu.dfu instanceof DFUse && webdfu.dfu.memoryInfo) {
-    let dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
+    const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = false;
     dfuseStartAddressField.disabled = false;
     dfuseUploadSizeField.disabled = false;
-    let segment = webdfu.dfu.getFirstWritableSegment();
+    const segment = webdfu.dfu.getFirstWritableSegment();
     if (segment) {
       webdfu.dfu.startAddress = segment.start;
       dfuseStartAddressField.value = "0x" + segment.start.toString(16);
@@ -230,7 +232,7 @@ async function connect(interfaceIndex: number) {
       dfuseUploadSizeField.max = maxReadSize.toString();
     }
   } else {
-    let dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
+    const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = true;
     dfuseStartAddressField.disabled = true;
     dfuseUploadSizeField.disabled = true;
@@ -245,7 +247,7 @@ transferSizeField.addEventListener("change", () => {
 
 dfuseStartAddressField.addEventListener("change", function (event) {
   const field = event.target as HTMLInputElement;
-  let address = parseInt(field.value, 16);
+  const address = parseInt(field.value, 16);
   if (isNaN(address)) {
     field.setCustomValidity("Invalid hexadecimal start address");
   } else if (webdfu?.dfu && webdfu.dfu instanceof DFUse && webdfu?.dfu?.memoryInfo) {
@@ -306,7 +308,7 @@ uploadButton.addEventListener("click", async function (event) {
     setLogContext(uploadLog);
     clearLog(uploadLog);
     try {
-      let status = await webdfu?.dfu.getStatus();
+      const status = await webdfu?.dfu.getStatus();
       if (status.state == dfu.dfuERROR) {
         await webdfu?.dfu.clearStatus();
       }
@@ -322,9 +324,7 @@ uploadButton.addEventListener("click", async function (event) {
     try {
       const blob = await webdfu?.dfu.do_upload(transferSize, maxSize);
 
-      // Global function in FileSaver.js
-      // @ts-ignore
-      window.saveAs(blob, "firmware.bin");
+      saveAs(blob, "firmware.bin");
     } catch (error) {
       logError(error);
     }
@@ -338,8 +338,8 @@ uploadButton.addEventListener("click", async function (event) {
 firmwareFileField.addEventListener("change", function () {
   firmwareFile = null;
   if (firmwareFileField.files.length > 0) {
-    let file = firmwareFileField.files?.[0] as Blob;
-    let reader = new FileReader();
+    const file = firmwareFileField.files?.[0] as Blob;
+    const reader = new FileReader();
     reader.onload = function () {
       firmwareFile = reader.result;
     };
@@ -361,7 +361,7 @@ downloadButton.addEventListener("click", async function (event) {
     clearLog(downloadLog);
 
     try {
-      let status = await webdfu?.dfu.getStatus();
+      const status = await webdfu?.dfu.getStatus();
 
       if (status.state == dfu.dfuERROR) {
         await webdfu?.dfu.clearStatus();
