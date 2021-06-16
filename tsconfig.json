@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "moduleResolution": "node",
     "lib": ["ES5", "ES6", "dom"],
+    "declaration": true,
 
     "strict": false,
     "noImplicitAny": false,

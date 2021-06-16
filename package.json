@@ -2,13 +2,15 @@
   "name": "dfu",
   "version": "0.1.0",
   "description": "Driver for working with DFU in a browser over Web USB",
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "files": ["dist", "package.json", "package-lock.json", "readme.md"],
   "scripts": {
-    "clear": "rm -rf .cache dist tsconfig.tsbuildinfo",
-    "demo": "parcel demo/index.html",
+    "build": "rollup -c rollup.config.js",
+    "demo": "parcel -d demo/dist demo/index.html",
     "format": "prettier --write .",
     "test:types": "tsc --build tsconfig.json",
-    "test": "npm run test:types"
+    "test": "npm run test:types",
+    "clear": "rm -rf .cache dist tsconfig.tsbuildinfo"
   },
   "repository": {
     "type": "git",
@@ -33,6 +35,9 @@
     "@types/w3c-web-usb": "^1.0.4",
     "parcel-bundler": "^1.12.5",
     "prettier": "^2.3.0",
+    "rollup": "^2.52.0",
+    "rollup-plugin-terser": "^7.0.2",
+    "rollup-plugin-ts": "^1.4.0",
     "typescript": "^4.3.2"
   },
   "dependencies": {

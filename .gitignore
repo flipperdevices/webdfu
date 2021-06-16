@@ -5,8 +5,9 @@
 node_modules
 
 # Build
+dist
 tsconfig.tsbuildinfo
 
 # Demo
-dist
+demo/dist
 .cache
