@@ -2,7 +2,13 @@
   "name": "dfu",
   "version": "0.1.1",
   "description": "Driver for working with DFU in a browser over Web USB",
-  "main": "dist/index.js",
+  "type": "module",
+  "module": "dist/index.js",
+  "main": "dist/index.cjs",
+  "exports": {
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.js"
+  },
   "files": [
     "dist",
     "README.md",
@@ -10,6 +16,7 @@
     "package-lock.json"
   ],
   "scripts": {
+    "prepublish": "npm-s test build",
     "build": "rollup -c rollup.config.js",
     "format": "prettier --check .",
     "lint": "eslint **/*.ts",
