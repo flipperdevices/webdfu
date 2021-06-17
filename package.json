@@ -33,7 +33,7 @@
     "flipper"
   ],
   "author": "Nikolay Govorov <me@govorov.online> (https://govorov.online)",
-  "license": "Unlicense",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/Flipper-Zero/webdfu/issues"
   },
