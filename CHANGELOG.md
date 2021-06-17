@@ -2,6 +2,13 @@
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.1.3
+
+- Refactor the types
+- Set up the strict mode in TS
+- Add the read and write in main interface
+- Add the read example in readme
+
 ## 0.1.2
 
 - Declare the MIT license

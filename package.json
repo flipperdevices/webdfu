@@ -1,6 +1,6 @@
 {
   "name": "dfu",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Driver for working with DFU in a browser over Web USB",
   "type": "module",
   "module": "dist/index.js",
