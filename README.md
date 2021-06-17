@@ -22,6 +22,8 @@ Full example in: [webdfu/demo](https://github.com/Flipper-Zero/webdfu/tree/main/
 Basic example:
 
 ```javascript
+import { WebDFU } from "dfu";
+
 async function connect() {
   // Load the device by WebUSB
   const selectedDevice = await navigator.usb.requestDevice({ filters: [] });
@@ -34,13 +36,13 @@ async function connect() {
     throw new Error("The selected device does not have any USB DFU interfaces.");
   }
 
-  await webdfu.connect(interfaceIndex);
+  // Connect to first device interface
+  await webdfu.connect(0);
 
   console.log({
     Version: webdfu.properties.DFUVersion.toString(16),
     CanUpload: webdfu.properties.CanUpload,
     CanDownload: webdfu.properties.CanDnload,
-    TransferSize: webdfu.properties.TransferSize,
     TransferSize: webdfu.properties.TransferSize,
     DetachTimeOut: webdfu.properties.DetachTimeOut,
   });
@@ -66,5 +68,10 @@ async function connect() {
   }
 }
 
-connect().catch(console.error);
+/*
+  The browser's security policy requires that WebUSB be accessed only by an explicit user action.
+  Add the button in your html and run the WebDFu after click in button.
+  In HTML: <button id="connect-button">Connect</button>
+*/
+document.getElementById("connect-button").addEventListener("click", connect);
 ```
