@@ -1,63 +1,51 @@
 import { createNanoEvents } from "nanoevents";
-import { DFU, parseConfigurationDescriptor } from "./dfu";
-import { DFUse } from "./dfuse";
 
-export type WebDFUInterface = {
-  name?: string;
-  configuration: USBConfiguration;
-  interface: USBInterface;
-  alternate: USBAlternateInterface;
-};
+import {
+  WebDFUSettings,
+  WebDFUEvent,
+  WebDFUOptions,
+  WebDFUProperties,
+  WebDFUType,
+  WebDFULog,
+  WebDFUInterfaceSubDescriptor,
+  WebDFUInterfaceDescriptor,
+} from "./types";
+import { WebDFUDriver } from "./base.driver";
+import { DriverDFU } from "./dfu.driver";
+import { DriverDFUse } from "./dfuse.driver";
 
-export type WebDFUEvent = {
-  init: () => void;
-  connect: () => void;
-  disconnect: (error?: Error) => void;
-};
-
-export type WebDFUOptions = {
-  forceInterfacesName?: boolean;
-};
-
-export type WebDFUProperties = {
-  WillDetach: boolean;
-  ManifestationTolerant: boolean;
-  CanUpload: boolean;
-  CanDnload: boolean;
-  TransferSize: number;
-  DetachTimeOut: number;
-  DFUVersion: number;
-};
-
-export enum WebDFUType {
-  DFU = 1,
-  SDFUse,
-}
+export * from "./types";
+export * from "./base.driver";
+export * from "./dfu.driver";
+export * from "./dfuse.driver";
 
 export class WebDFU {
   events = createNanoEvents<WebDFUEvent>();
 
-  interfaces: WebDFUInterface[] = [];
-  dfu?: DFU | DFUse;
+  driver?: WebDFUDriver;
+  interfaces: WebDFUSettings[] = [];
   properties?: WebDFUProperties;
 
-  constructor(public readonly device: USBDevice, public readonly settings: WebDFUOptions = {}) {}
+  constructor(
+    public readonly device: USBDevice,
+    public readonly settings: WebDFUOptions = {},
+    private readonly log?: WebDFULog
+  ) {}
 
-  get type(): WebDFUType {
-    if (this.properties?.DFUVersion == 0x011a && this.dfu?.settings.alternate.interfaceProtocol == 0x02) {
+  get type(): number {
+    if (this.properties?.DFUVersion == 0x011a && this.driver?.settings.alternate.interfaceProtocol == 0x02) {
       return WebDFUType.SDFUse;
     }
 
     return WebDFUType.DFU;
   }
 
-  async init() {
+  async init(): Promise<void> {
     this.interfaces = await this.findDfuInterfaces();
-
     this.events.emit("init");
   }
 
-  async connect(interfaceIndex: number) {
+  async connect(interfaceIndex: number): Promise<void> {
     if (!this.device.opened) {
       await this.device.open();
     }
@@ -71,18 +59,24 @@ export class WebDFU {
       throw error;
     }
 
-    this.dfu = new DFU(this.device, this.interfaces[interfaceIndex]);
+    const intrf = this.interfaces[interfaceIndex];
+
+    if (!intrf) {
+      throw new Error("Interface not found");
+    }
+
+    this.driver = new DriverDFU(this.device, intrf, this.log);
 
     if (desc) {
       this.properties = desc;
 
       if (this.type === WebDFUType.SDFUse) {
-        this.dfu = new DFUse(this.device, this.interfaces[interfaceIndex]);
+        this.driver = new DriverDFUse(this.device, intrf, this.log);
       }
     }
 
     try {
-      await this.dfu.open();
+      await this.driver.open();
     } catch (error) {
       this.events.emit("disconnect", error);
       throw error;
@@ -96,18 +90,26 @@ export class WebDFU {
     this.events.emit("disconnect");
   }
 
+  async read(xfer_size: number, max_size: number) {
+    return this.driver?.do_read(xfer_size, max_size);
+  }
+
+  write(xfer_size: number, data: ArrayBuffer, manifestationTolerant: boolean) {
+    return this.driver?.do_write(xfer_size, data, manifestationTolerant);
+  }
+
   // Attempt to read the DFU functional descriptor
   // TODO: read the selected configuration's descriptor
   private async getDFUDescriptorProperties(): Promise<WebDFUProperties | null> {
     const data = await this.readConfigurationDescriptor(0);
 
-    let configDesc = parseConfigurationDescriptor(data);
-    let funcDesc = null;
+    let configDesc = WebDFUDriver.parseConfigurationDescriptor(data);
+    let funcDesc: WebDFUInterfaceSubDescriptor | null = null;
     let configValue = this.device.configuration?.configurationValue;
     if (configDesc.bConfigurationValue == configValue) {
       for (let desc of configDesc.descriptors) {
         if (desc.bDescriptorType == 0x21 && desc.hasOwnProperty("bcdDFUVersion")) {
-          funcDesc = desc;
+          funcDesc = desc as WebDFUInterfaceSubDescriptor;
           break;
         }
       }
@@ -128,7 +130,7 @@ export class WebDFU {
     };
   }
 
-  private async findDfuInterfaces(): Promise<WebDFUInterface[]> {
+  private async findDfuInterfaces(): Promise<WebDFUSettings[]> {
     const interfaces = [];
 
     for (let conf of this.device.configurations) {
@@ -158,7 +160,7 @@ export class WebDFU {
     return interfaces;
   }
 
-  private async fixInterfaceNames(interfaces) {
+  private async fixInterfaceNames(interfaces: WebDFUSettings[]) {
     // Check if any interface names were not read correctly
     if (interfaces.some((intf) => intf.name == null)) {
       await this.device.open();
@@ -171,13 +173,13 @@ export class WebDFU {
           let configIndex = intf.configuration.configurationValue;
           let intfNumber = intf["interface"].interfaceNumber;
           let alt = intf.alternate.alternateSetting;
-          intf.name = mapping[configIndex][intfNumber][alt];
+          intf.name = mapping?.[configIndex]?.[intfNumber]?.[alt]?.toString();
         }
       }
     }
   }
 
-  async readStringDescriptor(index, langID = 0) {
+  async readStringDescriptor(index: number, langID = 0) {
     const GET_DESCRIPTOR = 0x06;
     const DT_STRING = 0x03;
     const wValue = (DT_STRING << 8) | index;
@@ -242,21 +244,25 @@ export class WebDFU {
   async readInterfaceNames() {
     const DT_INTERFACE = 4;
 
-    let configs = {};
+    let configs: Record<number, Record<number, Record<number, number>>> = {};
     let allStringIndices = new Set<any>();
     for (let configIndex = 0; configIndex < this.device.configurations.length; configIndex++) {
       const rawConfig = await this.readConfigurationDescriptor(configIndex);
-      let configDesc = parseConfigurationDescriptor(rawConfig);
+      let configDesc = WebDFUDriver.parseConfigurationDescriptor(rawConfig);
       let configValue = configDesc.bConfigurationValue;
       configs[configValue] = {};
 
       // Retrieve string indices for interface names
       for (let desc of configDesc.descriptors) {
-        if (desc.bDescriptorType == DT_INTERFACE) {
-          if (!(desc.bInterfaceNumber in configs[configValue])) {
-            configs[configValue][desc.bInterfaceNumber] = {};
+        if (desc.bDescriptorType === DT_INTERFACE) {
+          desc = desc as WebDFUInterfaceDescriptor;
+
+          if (!configs[configValue]?.[desc.bInterfaceNumber]) {
+            configs[configValue]![desc.bInterfaceNumber] = {};
           }
-          configs[configValue][desc.bInterfaceNumber][desc.bAlternateSetting] = desc.iInterface;
+
+          configs[configValue]![desc.bInterfaceNumber]![desc.bAlternateSetting] = desc.iInterface;
+
           if (desc.iInterface > 0) {
             allStringIndices.add(desc.iInterface);
           }
@@ -275,11 +281,10 @@ export class WebDFU {
       }
     }
 
-    for (let configValue in configs) {
-      for (let intfNumber in configs[configValue]) {
-        for (let alt in configs[configValue][intfNumber]) {
-          const iIndex = configs[configValue][intfNumber][alt];
-          configs[configValue][intfNumber][alt] = strings[iIndex];
+    for (let config of Object.values(configs)) {
+      for (let intf of Object.values(config)) {
+        for (let alt in intf) {
+          intf[alt] = strings[intf[alt]!];
         }
       }
     }
@@ -318,6 +323,3 @@ export class WebDFU {
     return descriptor.data;
   }
 }
-
-export * from "./dfu";
-export * from "./dfuse";

@@ -1,11 +1,11 @@
 import { saveAs } from "file-saver";
 
-import { dfu, DFU, DFUse, WebDFU, WebDFUType } from "../index";
+import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "../index";
 
 import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
 // Utils
-function hex4(n) {
+function hex4(n: number) {
   let s = n.toString(16);
 
   while (s.length < 4) {
@@ -15,7 +15,7 @@ function hex4(n) {
   return s;
 }
 
-function hexAddr8(n) {
+function hexAddr8(n: number) {
   let s = n.toString(16);
   while (s.length < 8) {
     s = "0" + s;
@@ -23,7 +23,7 @@ function hexAddr8(n) {
   return "0x" + s;
 }
 
-function niceSize(n) {
+function niceSize(n: number) {
   const gigabyte = 1024 * 1024 * 1024;
   const megabyte = 1024 * 1024;
   const kilobyte = 1024;
@@ -38,10 +38,10 @@ function niceSize(n) {
   }
 }
 
-function formatDFUSummary(device: DFU) {
-  const vid = hex4(device.device_.vendorId);
-  const pid = hex4(device.device_.productId);
-  const name = device.device_.productName;
+function formatDFUSummary(device: WebDFUDriver) {
+  const vid = hex4(device.device.vendorId);
+  const pid = hex4(device.device.productId);
+  const name = device.device.productName;
 
   let mode = "Unknown";
   if (device.settings.alternate.interfaceProtocol == 0x01) {
@@ -53,7 +53,7 @@ function formatDFUSummary(device: DFU) {
   const cfg = device.settings.configuration.configurationValue;
   const intf = device.settings["interface"].interfaceNumber;
   const alt = device.settings.alternate.alternateSetting;
-  const serial = device.device_.serialNumber;
+  const serial = device.device.serialNumber;
 
   return `${mode}: [${vid}:${pid}] cfg=${cfg}, intf=${intf}, alt=${alt}, name="${name}" serial="${serial}"`;
 }
@@ -77,7 +77,7 @@ const dfuseStartAddressField = document.querySelector("#dfuseStartAddress") as H
 const dfuseUploadSizeField = document.querySelector("#dfuseUploadSize") as HTMLInputElement;
 
 const firmwareFileField = document.querySelector("#firmwareFile") as HTMLInputElement;
-let firmwareFile = null;
+let firmwareFile: ArrayBuffer | null = null;
 
 const downloadLog = document.querySelector("#downloadLog") as HTMLDivElement;
 const uploadLog = document.querySelector("#uploadLog") as HTMLDivElement;
@@ -97,7 +97,7 @@ function onDisconnect(reason?: Error) {
   firmwareFileField.disabled = true;
 }
 
-function onUnexpectedDisconnect(event) {
+function onUnexpectedDisconnect(event: USBConnectionEvent) {
   if (webdfu?.device) {
     if (webdfu?.device === event.device) {
       onDisconnect(new Error("Device disconnected"));
@@ -113,7 +113,7 @@ async function connect(interfaceIndex: number) {
 
   await webdfu.connect(interfaceIndex);
 
-  if (!webdfu.dfu) {
+  if (!webdfu.driver) {
     throw new Error();
   }
 
@@ -139,7 +139,7 @@ async function connect(interfaceIndex: number) {
       manifestationTolerant = webdfu.properties.ManifestationTolerant;
     }
 
-    if (webdfu.dfu.settings.alternate.interfaceProtocol == 0x02) {
+    if (webdfu.driver.settings.alternate.interfaceProtocol == 0x02) {
       if (!desc.CanUpload) {
         uploadButton.disabled = false;
         dfuseUploadSizeField.disabled = true;
@@ -150,14 +150,15 @@ async function connect(interfaceIndex: number) {
       }
     }
 
-    if (webdfu.type === WebDFUType.SDFUse && webdfu.dfu instanceof DFUse) {
-      if (webdfu.dfu.memoryInfo) {
+    console.log(WebDFUType);
+    if (webdfu.type === WebDFUType.SDFUse && webdfu.driver instanceof DriverDFUse) {
+      if (webdfu.driver.memoryInfo) {
         let totalSize = 0;
-        for (const segment of webdfu.dfu.memoryInfo.segments) {
+        for (const segment of webdfu.driver.memoryInfo.segments) {
           totalSize += segment.end - segment.start;
         }
-        memorySummary = `Selected memory region: ${webdfu.dfu.memoryInfo.name} (${niceSize(totalSize)})`;
-        for (const segment of webdfu.dfu.memoryInfo.segments) {
+        memorySummary = `Selected memory region: ${webdfu.driver.memoryInfo.name} (${niceSize(totalSize)})`;
+        for (const segment of webdfu.driver.memoryInfo.segments) {
           const properties = [];
           if (segment.readable) {
             properties.push("readable");
@@ -179,13 +180,6 @@ async function connect(interfaceIndex: number) {
     }
   }
 
-  // Bind logging methods
-  webdfu.dfu.logDebug = logDebug;
-  webdfu.dfu.logInfo = logInfo;
-  webdfu.dfu.logWarning = logWarning;
-  webdfu.dfu.logError = logError;
-  webdfu.dfu.logProgress = logProgress;
-
   // Clear logs
   clearLog(uploadLog);
   clearLog(downloadLog);
@@ -194,19 +188,19 @@ async function connect(interfaceIndex: number) {
   statusDisplay.textContent = "";
   connectButton.textContent = "Disconnect";
   infoDisplay.textContent =
-    `Name: ${webdfu.dfu.device_.productName}\n` +
-    `MFG: ${webdfu.dfu.device_.manufacturerName}\n` +
-    `Serial: ${webdfu.dfu.device_.serialNumber}\n`;
+    `Name: ${webdfu.driver.device.productName}\n` +
+    `MFG: ${webdfu.driver.device.manufacturerName}\n` +
+    `Serial: ${webdfu.driver.device.serialNumber}\n`;
 
   // Display basic dfu-util style info
-  if (webdfu.dfu) {
-    dfuDisplay.textContent = formatDFUSummary(webdfu.dfu) + "\n" + memorySummary;
+  if (webdfu.driver) {
+    dfuDisplay.textContent = formatDFUSummary(webdfu.driver) + "\n" + memorySummary;
   } else {
     dfuDisplay.textContent = "Not found";
   }
 
   // Update buttons based on capabilities
-  if (webdfu.dfu?.settings.alternate.interfaceProtocol == 0x01) {
+  if (webdfu.driver?.settings.alternate.interfaceProtocol == 0x01) {
     // Runtime
     uploadButton.disabled = false;
     downloadButton.disabled = true;
@@ -218,16 +212,16 @@ async function connect(interfaceIndex: number) {
     firmwareFileField.disabled = false;
   }
 
-  if (webdfu.dfu instanceof DFUse && webdfu.dfu.memoryInfo) {
+  if (webdfu.driver instanceof DriverDFUse && webdfu.driver.memoryInfo) {
     const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = false;
     dfuseStartAddressField.disabled = false;
     dfuseUploadSizeField.disabled = false;
-    const segment = webdfu.dfu.getFirstWritableSegment();
+    const segment = webdfu.driver.getFirstWritableSegment();
     if (segment) {
-      webdfu.dfu.startAddress = segment.start;
+      webdfu.driver.startAddress = segment.start;
       dfuseStartAddressField.value = "0x" + segment.start.toString(16);
-      const maxReadSize = webdfu.dfu.getMaxReadSize(segment.start);
+      const maxReadSize = webdfu.driver.getMaxReadSize(segment.start);
       dfuseUploadSizeField.value = maxReadSize.toString();
       dfuseUploadSizeField.max = maxReadSize.toString();
     }
@@ -238,7 +232,7 @@ async function connect(interfaceIndex: number) {
     dfuseUploadSizeField.disabled = true;
   }
 
-  return webdfu.dfu;
+  return webdfu.driver;
 }
 
 transferSizeField.addEventListener("change", () => {
@@ -250,12 +244,12 @@ dfuseStartAddressField.addEventListener("change", function (event) {
   const address = parseInt(field.value, 16);
   if (isNaN(address)) {
     field.setCustomValidity("Invalid hexadecimal start address");
-  } else if (webdfu?.dfu && webdfu.dfu instanceof DFUse && webdfu?.dfu?.memoryInfo) {
-    if (webdfu?.dfu.getSegment(address) !== null) {
-      webdfu.dfu.startAddress = address;
+  } else if (webdfu?.driver && webdfu.driver instanceof DriverDFUse && webdfu?.driver?.memoryInfo) {
+    if (webdfu?.driver.getSegment(address) !== null) {
+      webdfu.driver.startAddress = address;
       field.setCustomValidity("");
-      if (webdfu?.dfu && webdfu?.dfu instanceof DFUse) {
-        dfuseUploadSizeField.max = webdfu.dfu.getMaxReadSize(address).toString();
+      if (webdfu?.driver && webdfu?.driver instanceof DriverDFUse) {
+        dfuseUploadSizeField.max = webdfu.driver.getMaxReadSize(address).toString();
       }
     } else {
       field.setCustomValidity("Address outside of memory map");
@@ -276,7 +270,19 @@ connectButton.addEventListener("click", function () {
   navigator.usb
     .requestDevice({ filters: [] })
     .then(async (selectedDevice) => {
-      webdfu = new WebDFU(selectedDevice, { forceInterfacesName: true });
+      webdfu = new WebDFU(
+        selectedDevice,
+        {
+          forceInterfacesName: true,
+        },
+        {
+          debug: logDebug,
+          info: logInfo,
+          warning: logWarning,
+          error: logError,
+          progress: logProgress,
+        }
+      );
       webdfu.events.on("disconnect", onDisconnect);
 
       await webdfu.init();
@@ -289,6 +295,7 @@ connectButton.addEventListener("click", function () {
       await connect(0);
     })
     .catch((error) => {
+      console.log(error);
       statusDisplay.textContent = error;
     });
 });
@@ -301,19 +308,18 @@ uploadButton.addEventListener("click", async function (event) {
     return false;
   }
 
-  if (!webdfu?.dfu || !webdfu?.dfu.device_.opened) {
+  if (!webdfu?.driver || !webdfu?.driver.device.opened) {
     onDisconnect();
     webdfu = null;
   } else {
     setLogContext(uploadLog);
     clearLog(uploadLog);
     try {
-      const status = await webdfu?.dfu.getStatus();
-      if (status.state == dfu.dfuERROR) {
-        await webdfu?.dfu.clearStatus();
+      if (await webdfu?.driver?.isError()) {
+        await webdfu?.driver.clearStatus();
       }
     } catch (error) {
-      webdfu?.dfu.logWarning("Failed to clear status");
+      webdfu?.driver.logWarning("Failed to clear status");
     }
 
     let maxSize = Infinity;
@@ -322,7 +328,7 @@ uploadButton.addEventListener("click", async function (event) {
     }
 
     try {
-      const blob = await webdfu?.dfu.do_upload(transferSize, maxSize);
+      const blob = await webdfu?.driver.do_read(transferSize, maxSize);
 
       saveAs(blob, "firmware.bin");
     } catch (error) {
@@ -337,48 +343,45 @@ uploadButton.addEventListener("click", async function (event) {
 
 firmwareFileField.addEventListener("change", function () {
   firmwareFile = null;
-  if (firmwareFileField.files.length > 0) {
+  if ((firmwareFileField?.files ?? []).length > 0) {
     const file = firmwareFileField.files?.[0] as Blob;
     const reader = new FileReader();
     reader.onload = function () {
-      firmwareFile = reader.result;
+      if (reader.result instanceof ArrayBuffer) {
+        firmwareFile = reader.result;
+      }
     };
     reader.readAsArrayBuffer(file);
   }
 });
 
-downloadButton.addEventListener("click", async function (event) {
-  event.preventDefault();
-  event.stopPropagation();
-
+async function download(): Promise<void> {
   if (!configForm.checkValidity()) {
     configForm.reportValidity();
-    return false;
+    return;
   }
 
-  if (webdfu?.dfu && firmwareFile != null) {
+  if (webdfu?.driver && firmwareFile != null) {
     setLogContext(downloadLog);
     clearLog(downloadLog);
 
     try {
-      const status = await webdfu?.dfu.getStatus();
-
-      if (status.state == dfu.dfuERROR) {
-        await webdfu?.dfu.clearStatus();
+      if (await webdfu?.driver?.isError()) {
+        await webdfu?.driver.clearStatus();
       }
     } catch (error) {
-      webdfu?.dfu.logWarning("Failed to clear status");
+      webdfu?.driver.logWarning("Failed to clear status");
     }
 
     try {
-      await webdfu?.dfu.do_download(transferSize, firmwareFile, manifestationTolerant);
+      await webdfu?.driver.do_write(transferSize, firmwareFile, manifestationTolerant);
 
       logInfo("Done!");
       setLogContext(null);
 
       if (!manifestationTolerant) {
         try {
-          await webdfu?.dfu.waitDisconnected(5000);
+          await webdfu?.driver.waitDisconnected(5000);
 
           onDisconnect();
           webdfu = null;
@@ -392,6 +395,13 @@ downloadButton.addEventListener("click", async function (event) {
       setLogContext(null);
     }
   }
+}
+
+downloadButton.addEventListener("click", async function (event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  download().catch(console.error);
 });
 
 if (typeof navigator.usb === "undefined") {

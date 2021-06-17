@@ -1,23 +1,20 @@
-let logContext = null;
+let logContext: HTMLDivElement | null = null;
 
-export function setLogContext(div) {
+export function setLogContext(div: HTMLDivElement | null): void {
   logContext = div;
 }
 
-export function clearLog(context) {
-  if (typeof context === "undefined") {
-    context = logContext;
-  }
+export function clearLog(context = logContext): void {
   if (context) {
     context.innerHTML = "";
   }
 }
 
-export function logDebug(msg) {
-  console.log(msg);
+export function logDebug(msg: string): void {
+  console.debug(msg);
 }
 
-export function logInfo(msg) {
+export function logInfo(msg: string): void {
   if (logContext) {
     const info = document.createElement("p");
     info.className = "info";
@@ -26,7 +23,7 @@ export function logInfo(msg) {
   }
 }
 
-export function logWarning(msg) {
+export function logWarning(msg: string): void {
   if (logContext) {
     const warning = document.createElement("p");
     warning.className = "warning";
@@ -35,7 +32,7 @@ export function logWarning(msg) {
   }
 }
 
-export function logError(msg) {
+export function logError(msg: string): void {
   if (logContext) {
     const error = document.createElement("p");
     error.className = "error";
@@ -44,16 +41,18 @@ export function logError(msg) {
   }
 }
 
-export function logProgress(done, total) {
+export function logProgress(done: number, total?: number): void {
   if (logContext) {
-    let progressBar;
-    if (logContext.lastChild.tagName.toLowerCase() == "progress") {
-      progressBar = logContext.lastChild;
+    let progressBar: HTMLProgressElement | null = null;
+    if (logContext?.lastElementChild?.tagName.toLowerCase() == "progress") {
+      progressBar = logContext.lastElementChild as HTMLProgressElement;
     }
+
     if (!progressBar) {
       progressBar = document.createElement("progress");
       logContext.appendChild(progressBar);
     }
+
     progressBar.value = done;
     if (typeof total !== "undefined") {
       progressBar.max = total;
