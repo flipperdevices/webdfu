@@ -2,6 +2,11 @@
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.1.4
+
+- Fix the examples in doc
+- Add the changlelog and license in package
+
 ## 0.1.3
 
 - Refactor the types
