@@ -1,7 +1,8 @@
 import { saveAs } from "file-saver";
-import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "dfu";
+import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "./dfu/index";
 
-import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
+import { clearLog, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
+import { USB_PROTOCOL_DFU, USB_PROTOCOL_DFUSE } from "../core";
 
 // Utils
 function hex4(n: number) {
@@ -43,9 +44,9 @@ function formatDFUSummary(device: WebDFUDriver) {
   const name = device.device.productName;
 
   let mode = "Unknown";
-  if (device.settings.alternate.interfaceProtocol == 0x01) {
+  if (device.settings.alternate.interfaceProtocol === USB_PROTOCOL_DFU) {
     mode = "Runtime";
-  } else if (device.settings.alternate.interfaceProtocol == 0x02) {
+  } else if (device.settings.alternate.interfaceProtocol == USB_PROTOCOL_DFUSE) {
     mode = "DFU";
   }
 
@@ -61,8 +62,8 @@ function formatDFUSummary(device: WebDFUDriver) {
 let webdfu: WebDFU | null = null;
 
 const connectButton = document.querySelector("#connect") as HTMLButtonElement;
-const downloadButton = document.querySelector("#download") as HTMLButtonElement;
-const uploadButton = document.querySelector("#upload") as HTMLButtonElement;
+const writeButton = document.querySelector("#write") as HTMLButtonElement;
+const readButton = document.querySelector("#read") as HTMLButtonElement;
 const statusDisplay = document.querySelector("#status") as HTMLDivElement;
 const infoDisplay = document.querySelector("#usbInfo") as HTMLDivElement;
 const dfuDisplay = document.querySelector("#dfuInfo") as HTMLDivElement;
@@ -73,13 +74,13 @@ const transferSizeField = document.querySelector("#transferSize") as HTMLInputEl
 let transferSize = parseInt(transferSizeField.value);
 
 const dfuseStartAddressField = document.querySelector("#dfuseStartAddress") as HTMLInputElement;
-const dfuseUploadSizeField = document.querySelector("#dfuseUploadSize") as HTMLInputElement;
+const dfuseReadSizeField = document.querySelector("#dfuseReadSize") as HTMLInputElement;
 
 const firmwareFileField = document.querySelector("#firmwareFile") as HTMLInputElement;
 let firmwareFile: ArrayBuffer | null = null;
 
-const downloadLog = document.querySelector("#downloadLog") as HTMLDivElement;
-const uploadLog = document.querySelector("#uploadLog") as HTMLDivElement;
+const writeLog = document.querySelector("#writeLog") as HTMLDivElement;
+const readLog = document.querySelector("#readLog") as HTMLDivElement;
 
 let manifestationTolerant = true;
 
@@ -91,8 +92,8 @@ function onDisconnect(reason?: Error) {
   connectButton.textContent = "Connect";
   infoDisplay.textContent = "";
   dfuDisplay.textContent = "";
-  uploadButton.disabled = false;
-  downloadButton.disabled = true;
+  readButton.disabled = false;
+  writeButton.disabled = true;
   firmwareFileField.disabled = true;
 }
 
@@ -123,8 +124,8 @@ async function connect(interfaceIndex: number) {
     const info = [
       `WillDetach=${webdfu.properties.WillDetach}`,
       `ManifestationTolerant=${webdfu.properties.ManifestationTolerant}`,
-      `CanUpload=${webdfu.properties.CanUpload}`,
-      `CanDownload=${webdfu.properties.CanDnload}`,
+      `CanRead=${webdfu.properties.CanRead}`,
+      `CanWrite=${webdfu.properties.CanWrite}`,
       `TransferSize=${webdfu.properties.TransferSize}`,
       `DetachTimeOut=${webdfu.properties.DetachTimeOut}`,
       `Version=${hex4(webdfu.properties.DFUVersion)}`,
@@ -134,18 +135,18 @@ async function connect(interfaceIndex: number) {
     transferSizeField.value = webdfu.properties.TransferSize.toString();
     transferSize = webdfu.properties.TransferSize;
 
-    if (webdfu.properties.CanDnload) {
+    if (webdfu.properties.CanWrite) {
       manifestationTolerant = webdfu.properties.ManifestationTolerant;
     }
 
     if (webdfu.driver.settings.alternate.interfaceProtocol == 0x02) {
-      if (!desc.CanUpload) {
-        uploadButton.disabled = false;
-        dfuseUploadSizeField.disabled = true;
+      if (!desc.CanRead) {
+        readButton.disabled = false;
+        dfuseReadSizeField.disabled = true;
       }
 
-      if (!desc.CanDnload) {
-        downloadButton.disabled = true;
+      if (!desc.CanWrite) {
+        writeButton.disabled = true;
       }
     }
 
@@ -180,8 +181,8 @@ async function connect(interfaceIndex: number) {
   }
 
   // Clear logs
-  clearLog(uploadLog);
-  clearLog(downloadLog);
+  clearLog(readLog);
+  clearLog(writeLog);
 
   // Display basic USB information
   statusDisplay.textContent = "";
@@ -201,13 +202,13 @@ async function connect(interfaceIndex: number) {
   // Update buttons based on capabilities
   if (webdfu.driver?.settings.alternate.interfaceProtocol == 0x01) {
     // Runtime
-    uploadButton.disabled = false;
-    downloadButton.disabled = true;
+    readButton.disabled = false;
+    writeButton.disabled = true;
     firmwareFileField.disabled = true;
   } else {
     // DFU
-    uploadButton.disabled = false;
-    downloadButton.disabled = false;
+    readButton.disabled = false;
+    writeButton.disabled = false;
     firmwareFileField.disabled = false;
   }
 
@@ -215,20 +216,20 @@ async function connect(interfaceIndex: number) {
     const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = false;
     dfuseStartAddressField.disabled = false;
-    dfuseUploadSizeField.disabled = false;
+    dfuseReadSizeField.disabled = false;
     const segment = webdfu.driver.getFirstWritableSegment();
     if (segment) {
       webdfu.driver.startAddress = segment.start;
       dfuseStartAddressField.value = "0x" + segment.start.toString(16);
       const maxReadSize = webdfu.driver.getMaxReadSize(segment.start);
-      dfuseUploadSizeField.value = maxReadSize.toString();
-      dfuseUploadSizeField.max = maxReadSize.toString();
+      dfuseReadSizeField.value = maxReadSize.toString();
+      dfuseReadSizeField.max = maxReadSize.toString();
     }
   } else {
     const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = true;
     dfuseStartAddressField.disabled = true;
-    dfuseUploadSizeField.disabled = true;
+    dfuseReadSizeField.disabled = true;
   }
 
   return webdfu.driver;
@@ -248,7 +249,7 @@ dfuseStartAddressField.addEventListener("change", function (event) {
       webdfu.driver.startAddress = address;
       field.setCustomValidity("");
       if (webdfu?.driver && webdfu?.driver instanceof DriverDFUse) {
-        dfuseUploadSizeField.max = webdfu.driver.getMaxReadSize(address).toString();
+        dfuseReadSizeField.max = webdfu.driver.getMaxReadSize(address).toString();
       }
     } else {
       field.setCustomValidity("Address outside of memory map");
@@ -275,7 +276,6 @@ connectButton.addEventListener("click", function () {
           forceInterfacesName: true,
         },
         {
-          debug: logDebug,
           info: logInfo,
           warning: logWarning,
           error: logError,
@@ -299,7 +299,7 @@ connectButton.addEventListener("click", function () {
     });
 });
 
-uploadButton.addEventListener("click", async function (event) {
+readButton.addEventListener("click", async function (event) {
   event.preventDefault();
   event.stopPropagation();
   if (!configForm.checkValidity()) {
@@ -311,8 +311,8 @@ uploadButton.addEventListener("click", async function (event) {
     onDisconnect();
     webdfu = null;
   } else {
-    setLogContext(uploadLog);
-    clearLog(uploadLog);
+    setLogContext(readLog);
+    clearLog(readLog);
     try {
       if (await webdfu?.driver?.isError()) {
         await webdfu?.driver.clearStatus();
@@ -322,8 +322,8 @@ uploadButton.addEventListener("click", async function (event) {
     }
 
     let maxSize = Infinity;
-    if (!dfuseUploadSizeField.disabled) {
-      maxSize = parseInt(dfuseUploadSizeField.value);
+    if (!dfuseReadSizeField.disabled) {
+      maxSize = parseInt(dfuseReadSizeField.value);
     }
 
     try {
@@ -354,15 +354,15 @@ firmwareFileField.addEventListener("change", function () {
   }
 });
 
-async function download(): Promise<void> {
+async function write(): Promise<void> {
   if (!configForm.checkValidity()) {
     configForm.reportValidity();
     return;
   }
 
   if (webdfu?.driver && firmwareFile != null) {
-    setLogContext(downloadLog);
-    clearLog(downloadLog);
+    setLogContext(writeLog);
+    clearLog(writeLog);
 
     try {
       if (await webdfu?.driver?.isError()) {
@@ -396,11 +396,11 @@ async function download(): Promise<void> {
   }
 }
 
-downloadButton.addEventListener("click", async function (event) {
+writeButton.addEventListener("click", async function (event) {
   event.preventDefault();
   event.stopPropagation();
 
-  download().catch(console.error);
+  write().catch(console.error);
 });
 
 if (typeof navigator.usb === "undefined") {

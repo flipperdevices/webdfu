@@ -10,10 +10,6 @@ export function clearLog(context = logContext): void {
   }
 }
 
-export function logDebug(msg: string): void {
-  console.debug(msg);
-}
-
 export function logInfo(msg: string): void {
   if (logContext) {
     const info = document.createElement("p");
