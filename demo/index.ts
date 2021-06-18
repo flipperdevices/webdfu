@@ -1,6 +1,5 @@
 import { saveAs } from "file-saver";
-
-import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "../index";
+import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "dfu";
 
 import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
