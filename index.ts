@@ -13,6 +13,7 @@ import {
 import { WebDFUDriver } from "./base.driver";
 import { DriverDFU } from "./dfu.driver";
 import { DriverDFUse } from "./dfuse.driver";
+import { WebDFUError } from "./core";
 
 export * from "./types";
 export * from "./base.driver";
@@ -62,7 +63,7 @@ export class WebDFU {
     const intrf = this.interfaces[interfaceIndex];
 
     if (!intrf) {
-      throw new Error("Interface not found");
+      throw new WebDFUError("Interface not found");
     }
 
     this.driver = new DriverDFU(this.device, intrf, this.log);
@@ -215,7 +216,7 @@ export class WebDFU {
       }
     }
 
-    throw `Failed to read string descriptor ${index}: ${result.status}`;
+    throw new WebDFUError(`Failed to read string descriptor ${index}: ${result.status}`);
   }
 
   async readDeviceDescriptor(): Promise<DataView> {
@@ -235,7 +236,7 @@ export class WebDFU {
     );
 
     if (!result.data || result.status !== "ok") {
-      throw `Failed to read device descriptor: ${result.status}`;
+      throw new WebDFUError(`Failed to read device descriptor: ${result.status}`);
     }
 
     return result.data;
@@ -308,7 +309,7 @@ export class WebDFU {
     const descriptorSize = await this.device.controlTransferIn(setup, 4);
 
     if (!descriptorSize.data || descriptorSize.status !== "ok") {
-      throw new Error(`controlTransferIn error. [status]: ${descriptorSize.status}`);
+      throw new WebDFUError(`controlTransferIn error. [status]: ${descriptorSize.status}`);
     }
 
     // Read out length of the configuration descriptor
@@ -317,7 +318,7 @@ export class WebDFU {
     const descriptor = await this.device.controlTransferIn(setup, wLength);
 
     if (!descriptor.data || descriptor.status !== "ok") {
-      throw new Error(`controlTransferIn error. [status]: ${descriptor.status}`);
+      throw new WebDFUError(`controlTransferIn error. [status]: ${descriptor.status}`);
     }
 
     return descriptor.data;

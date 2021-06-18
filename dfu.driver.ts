@@ -1,4 +1,5 @@
 import { dfuCommands, WebDFUDriver } from "./base.driver";
+import { WebDFUError } from "./core";
 
 export class DriverDFU extends WebDFUDriver {
   // Public interface
@@ -58,11 +59,11 @@ export class DriverDFU extends WebDFUDriver {
         this.logDebug("Sent " + bytes_written + " bytes");
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
       } catch (error) {
-        throw "Error during DFU download: " + error;
+        throw new WebDFUError("Error during DFU download: " + error);
       }
 
       if (dfu_status.status != dfuCommands.STATUS_OK) {
-        throw `DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`;
+        throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
       this.logDebug("Wrote " + bytes_written + " bytes");
@@ -75,7 +76,7 @@ export class DriverDFU extends WebDFUDriver {
     try {
       await this.download(new ArrayBuffer(0), transaction++);
     } catch (error) {
-      throw "Error during final DFU download: " + error;
+      throw new WebDFUError("Error during final DFU download: " + error);
     }
 
     this.logInfo("Wrote " + bytes_sent + " bytes");
@@ -94,7 +95,7 @@ export class DriverDFU extends WebDFUDriver {
           this.logDebug("Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant");
         }
         if (dfu_status.status != dfuCommands.STATUS_OK) {
-          throw `DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`;
+          throw new WebDFUError(`DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`);
         }
       } catch (error) {
         if (
@@ -103,7 +104,7 @@ export class DriverDFU extends WebDFUDriver {
         ) {
           this.logWarning("Unable to poll final manifestation status");
         } else {
-          throw "Error during DFU manifest: " + error;
+          throw new WebDFUError("Error during DFU manifest: " + error);
         }
       }
     } else {
@@ -127,7 +128,7 @@ export class DriverDFU extends WebDFUDriver {
       ) {
         this.logDebug("Ignored reset error");
       } else {
-        throw "Error during reset for manifestation: " + error;
+        throw new WebDFUError("Error during reset for manifestation: " + error);
       }
     }
   }

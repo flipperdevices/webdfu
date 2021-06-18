@@ -1,6 +1,7 @@
 import { DriverDFU } from "./dfu.driver";
 import { dfuCommands, WebDFUDriver } from "./base.driver";
 import { WebDFULog, WebDFUSettings } from "./types";
+import { WebDFUError } from "./core";
 
 export type DFUseMemorySegment = {
   start: number;
@@ -21,7 +22,7 @@ export enum DFUseCommands {
 function parseMemoryDescriptor(desc: string): { name: string; segments: DFUseMemorySegment[] } {
   const nameEndIndex = desc.indexOf("/");
   if (!desc.startsWith("@") || nameEndIndex == -1) {
-    throw `Not a DfuSe memory descriptor: "${desc}"`;
+    throw new WebDFUError(`Not a DfuSe memory descriptor: "${desc}"`);
   }
 
   const name = desc.substring(1, nameEndIndex).trim();
@@ -79,7 +80,7 @@ export class DriverDFUse extends WebDFUDriver {
 
   getSegment(addr: number): DFUseMemorySegment | null {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
-      throw "No memory map information available";
+      throw new WebDFUError("No memory map information available");
     }
 
     for (let segment of this.memoryInfo.segments) {
@@ -97,7 +98,7 @@ export class DriverDFUse extends WebDFUDriver {
     }
 
     if (!segment) {
-      throw `Address ${addr.toString(16)} outside of memory map`;
+      throw new WebDFUError(`Address ${addr.toString(16)} outside of memory map`);
     }
 
     const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
@@ -106,7 +107,7 @@ export class DriverDFUse extends WebDFUDriver {
 
   getSectorEnd(addr: number, segment = this.getSegment(addr)) {
     if (!segment) {
-      throw `Address ${addr.toString(16)} outside of memory map`;
+      throw new WebDFUError(`Address ${addr.toString(16)} outside of memory map`);
     }
 
     const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
@@ -115,7 +116,7 @@ export class DriverDFUse extends WebDFUDriver {
 
   getFirstWritableSegment() {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
-      throw "No memory map information available";
+      throw new WebDFUError("No memory map information available");
     }
 
     for (let segment of this.memoryInfo.segments) {
@@ -129,7 +130,7 @@ export class DriverDFUse extends WebDFUDriver {
 
   getMaxReadSize(startAddr: number) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
-      throw "No memory map information available";
+      throw new WebDFUError("No memory map information available");
     }
 
     let numBytes = 0;
@@ -160,7 +161,7 @@ export class DriverDFUse extends WebDFUDriver {
     const endAddr = this.getSectorEnd(startAddr + length - 1);
 
     if (!segment) {
-      throw new Error("Unknown segment");
+      throw new WebDFUError("Unknown segment");
     }
 
     let bytesErased = 0;
@@ -194,7 +195,7 @@ export class DriverDFUse extends WebDFUDriver {
 
   async do_write(xfer_size: number, data: ArrayBuffer) {
     if (!this.memoryInfo || !this.memoryInfo.segments) {
-      throw "No memory map available";
+      throw new WebDFUError("No memory map available");
     }
 
     this.logInfo("Erasing DFU device memory");
@@ -206,7 +207,7 @@ export class DriverDFUse extends WebDFUDriver {
     if (isNaN(startAddress)) {
       startAddress = this.memoryInfo.segments[0]?.start;
       if (!startAddress) {
-        throw new Error("startAddress not found");
+        throw new WebDFUError("startAddress not found");
       }
       this.logWarning("Using inferred start address 0x" + startAddress.toString(16));
     } else if (this.getSegment(startAddress) === null) {
@@ -231,11 +232,11 @@ export class DriverDFUse extends WebDFUDriver {
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
         address += chunk_size;
       } catch (error) {
-        throw "Error during DfuSe download: " + error;
+        throw new WebDFUError("Error during DfuSe download: " + error);
       }
 
       if (dfu_status.status != dfuCommands.STATUS_OK) {
-        throw `DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`;
+        throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
       this.logDebug("Wrote " + bytes_written + " bytes");
@@ -250,7 +251,7 @@ export class DriverDFUse extends WebDFUDriver {
       await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
       await this.download(new ArrayBuffer(0), 0);
     } catch (error) {
-      throw "Error during DfuSe manifestation: " + error;
+      throw new WebDFUError("Error during DfuSe manifestation: " + error);
     }
 
     try {
@@ -262,14 +263,14 @@ export class DriverDFUse extends WebDFUDriver {
 
   async do_read(xfer_size: number, max_size = Infinity) {
     if (!this.memoryInfo) {
-      throw new Error("Unknown a DfuSe memory info");
+      throw new WebDFUError("Unknown a DfuSe memory info");
     }
 
     let startAddress: number | undefined = this.startAddress;
     if (isNaN(startAddress)) {
       startAddress = this.memoryInfo.segments[0]?.start;
       if (!startAddress) {
-        throw new Error("Unknown memory segments");
+        throw new WebDFUError("Unknown memory segments");
       }
       this.logWarning("Using inferred start address 0x" + startAddress.toString(16));
     } else if (this.getSegment(startAddress) === null) {
@@ -305,19 +306,19 @@ export class DriverDFUse extends WebDFUDriver {
     } else if (len == 4) {
       view.setUint32(1, param, true);
     } else {
-      throw "Don't know how to handle data of len " + len;
+      throw new WebDFUError("Don't know how to handle data of len " + len);
     }
 
     try {
       await this.download(payload, 0);
     } catch (error) {
-      throw "Error during special DfuSe command " + commandNames[command] + ":" + error;
+      throw new WebDFUError("Error during special DfuSe command " + commandNames[command] + ":" + error);
     }
 
     let status = await this.poll_until((state) => state != dfuCommands.dfuDNBUSY);
 
     if (status.status != dfuCommands.STATUS_OK) {
-      throw "Special DfuSe command " + command + " failed";
+      throw new WebDFUError("Special DfuSe command " + command + " failed");
     }
   }
 }

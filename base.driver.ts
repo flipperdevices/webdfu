@@ -6,6 +6,7 @@ import {
   WebDFULog,
   WebDFUSettings,
 } from "./types";
+import { WebDFUError } from "./core";
 
 export const dfuCommands = {
   DETACH: 0x00,
@@ -70,12 +71,12 @@ export abstract class WebDFUDriver {
       );
 
       if (result.status !== "ok") {
-        throw new Error(result.status);
+        throw new WebDFUError(result.status);
       }
 
       return result.bytesWritten;
     } catch (error) {
-      throw new Error("ControlTransferOut failed: " + error);
+      throw new WebDFUError("ControlTransferOut failed: " + error);
     }
   }
 
@@ -93,12 +94,12 @@ export abstract class WebDFUDriver {
       );
 
       if (result.status !== "ok" || !result.data) {
-        throw new Error(result.status);
+        throw new WebDFUError(result.status);
       }
 
       return result.data;
     } catch (error) {
-      throw new Error("ControlTransferIn failed: " + error);
+      throw new WebDFUError("ControlTransferIn failed: " + error);
     }
   }
 
@@ -119,7 +120,7 @@ export abstract class WebDFUDriver {
     }
 
     if (!this.device.configuration) {
-      throw new Error(`Couldn't select the configuration '${confValue}'`);
+      throw new WebDFUError(`Couldn't select the configuration '${confValue}'`);
     }
 
     const intfNumber = this.settings["interface"].interfaceNumber;
@@ -222,7 +223,7 @@ export abstract class WebDFUDriver {
       state = await this.getState();
     }
     if (state != dfuCommands.dfuIDLE) {
-      throw "Failed to return to idle state after abort: state " + state;
+      throw new WebDFUError("Failed to return to idle state after abort: state " + state);
     }
   }
 
