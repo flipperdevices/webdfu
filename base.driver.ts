@@ -1,22 +1,16 @@
+import { WebDFULog, WebDFUSettings } from "./types";
 import {
-  WebDFUDeviceDescriptor,
-  WebDFUFunctionalDescriptor,
-  WebDFUInterfaceDescriptor,
-  WebDFUInterfaceSubDescriptor,
-  WebDFULog,
-  WebDFUSettings,
-} from "./types";
-import { WebDFUError } from "./core";
+  WebDFUError,
+  DFU_COMMAND_ABORT,
+  DFU_COMMAND_CLRSTATUS,
+  DFU_COMMAND_DETACH,
+  DFU_COMMAND_WRITE,
+  DFU_COMMAND_GETSTATE,
+  DFU_COMMAND_GETSTATUS,
+  DFU_COMMAND_READ,
+} from "./core";
 
 export const dfuCommands = {
-  DETACH: 0x00,
-  DNLOAD: 0x01,
-  UPLOAD: 0x02,
-  GETSTATUS: 0x03,
-  CLRSTATUS: 0x04,
-  GETSTATE: 0x05,
-  ABORT: 0x06,
-
   appIDLE: 0,
   appDETACH: 1,
 
@@ -27,7 +21,7 @@ export const dfuCommands = {
   dfuMANIFEST_SYNC: 6,
   dfuMANIFEST: 7,
   dfuMANIFEST_WAIT_RESET: 8,
-  dfuUPLOAD_IDLE: 9,
+  dfuREAD_IDLE: 9,
   dfuERROR: 10,
 
   STATUS_OK: 0x0,
@@ -36,14 +30,12 @@ export const dfuCommands = {
 export abstract class WebDFUDriver {
   connected: boolean = false;
 
-  logDebug: (msg: string) => void;
   logInfo: (msg: string) => void;
   logWarning: (msg: string) => void;
   logError: (msg: string) => void;
   logProgress: (done: number, total?: number) => void;
 
   constructor(public device: USBDevice, public settings: WebDFUSettings, log?: WebDFULog) {
-    this.logDebug = log?.debug ?? (() => {});
     this.logInfo = log?.info ?? (() => {});
     this.logWarning = log?.warning ?? (() => {});
     this.logError = log?.error ?? (() => {});
@@ -103,12 +95,12 @@ export abstract class WebDFUDriver {
     }
   }
 
-  protected download(data: ArrayBuffer, blockNum: number) {
-    return this.requestOut(dfuCommands.DNLOAD, data, blockNum);
+  protected write(data: ArrayBuffer, blockNum: number) {
+    return this.requestOut(DFU_COMMAND_WRITE, data, blockNum);
   }
 
-  protected upload(length: number, blockNum: number) {
-    return this.requestIn(dfuCommands.UPLOAD, length, blockNum);
+  protected read(length: number, blockNum: number) {
+    return this.requestIn(DFU_COMMAND_READ, length, blockNum);
   }
 
   // Control
@@ -136,11 +128,11 @@ export abstract class WebDFUDriver {
   }
 
   detach() {
-    return this.requestOut(dfuCommands.DETACH, undefined, 1000);
+    return this.requestOut(DFU_COMMAND_DETACH, undefined, 1000);
   }
 
   abort() {
-    return this.requestOut(dfuCommands.ABORT);
+    return this.requestOut(DFU_COMMAND_ABORT);
   }
 
   async waitDisconnected(timeout: number) {
@@ -185,21 +177,21 @@ export abstract class WebDFUDriver {
         return true;
       }
 
-      return state?.state == dfuCommands.dfuERROR;
+      return state?.state === dfuCommands.dfuERROR;
     } catch (_) {
       return true;
     }
   }
 
   getState() {
-    return this.requestIn(dfuCommands.GETSTATE, 1).then(
+    return this.requestIn(DFU_COMMAND_GETSTATE, 1).then(
       (data) => Promise.resolve(data.getUint8(0)),
       (error) => Promise.reject("DFU GETSTATE failed: " + error)
     );
   }
 
   getStatus() {
-    return this.requestIn(dfuCommands.GETSTATUS, 6).then(
+    return this.requestIn(DFU_COMMAND_GETSTATUS, 6).then(
       (data) =>
         Promise.resolve({
           status: data.getUint8(0),
@@ -211,14 +203,14 @@ export abstract class WebDFUDriver {
   }
 
   clearStatus() {
-    return this.requestOut(dfuCommands.CLRSTATUS);
+    return this.requestOut(DFU_COMMAND_CLRSTATUS);
   }
 
   // IDLE
   async abortToIdle() {
     await this.abort();
     let state = await this.getState();
-    if (state == dfuCommands.dfuERROR) {
+    if (state === dfuCommands.dfuERROR) {
       await this.clearStatus();
       state = await this.getState();
     }
@@ -230,13 +222,8 @@ export abstract class WebDFUDriver {
   async poll_until(state_predicate: (state: number) => boolean) {
     let dfu_status = await this.getStatus();
 
-    let device = this;
-
     function async_sleep(duration_ms: number) {
-      return new Promise((resolve) => {
-        device.logDebug("Sleeping for " + duration_ms + "ms");
-        setTimeout(resolve, duration_ms);
-      });
+      return new Promise((resolve) => setTimeout(resolve, duration_ms));
     }
 
     while (!state_predicate(dfu_status.state) && dfu_status.state != dfuCommands.dfuERROR) {
@@ -248,114 +235,6 @@ export abstract class WebDFUDriver {
   }
 
   poll_until_idle(idle_state: number) {
-    return this.poll_until((state: number) => state == idle_state);
-  }
-
-  // Static utils
-  static parseDeviceDescriptor(data: DataView): WebDFUDeviceDescriptor {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bcdUSB: data.getUint16(2, true),
-      bDeviceClass: data.getUint8(4),
-      bDeviceSubClass: data.getUint8(5),
-      bDeviceProtocol: data.getUint8(6),
-      bMaxPacketSize: data.getUint8(7),
-      idVendor: data.getUint16(8, true),
-      idProduct: data.getUint16(10, true),
-      bcdDevice: data.getUint16(12, true),
-      iManufacturer: data.getUint8(14),
-      iProduct: data.getUint8(15),
-      iSerialNumber: data.getUint8(16),
-      bNumConfigurations: data.getUint8(17),
-    };
-  }
-
-  static parseFunctionalDescriptor(data: DataView): WebDFUFunctionalDescriptor {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bmAttributes: data.getUint8(2),
-      wDetachTimeOut: data.getUint16(3, true),
-      wTransferSize: data.getUint16(5, true),
-      bcdDFUVersion: data.getUint16(7, true),
-    };
-  }
-
-  static parseInterfaceDescriptor(data: DataView): WebDFUInterfaceDescriptor {
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      bInterfaceNumber: data.getUint8(2),
-      bAlternateSetting: data.getUint8(3),
-      bNumEndpoints: data.getUint8(4),
-      bInterfaceClass: data.getUint8(5),
-      bInterfaceSubClass: data.getUint8(6),
-      bInterfaceProtocol: data.getUint8(7),
-      iInterface: data.getUint8(8),
-      descriptors: [],
-    };
-  }
-
-  static parseSubDescriptors(descriptorData: DataView) {
-    const DT_INTERFACE = 4;
-    // const DT_ENDPOINT = 5;
-    const DT_DFU_FUNCTIONAL = 0x21;
-    const USB_CLASS_APP_SPECIFIC = 0xfe;
-    const USB_SUBCLASS_DFU = 0x01;
-
-    let remainingData: DataView = descriptorData;
-    let descriptors = [];
-    let currIntf;
-    let inDfuIntf = false;
-
-    while (remainingData.byteLength > 2) {
-      let bLength = remainingData.getUint8(0);
-      let bDescriptorType = remainingData.getUint8(1);
-      let descData = new DataView(remainingData.buffer.slice(0, bLength));
-      if (bDescriptorType == DT_INTERFACE) {
-        currIntf = WebDFUDriver.parseInterfaceDescriptor(descData);
-        if (currIntf.bInterfaceClass == USB_CLASS_APP_SPECIFIC && currIntf.bInterfaceSubClass == USB_SUBCLASS_DFU) {
-          inDfuIntf = true;
-        } else {
-          inDfuIntf = false;
-        }
-        descriptors.push(currIntf);
-      } else if (inDfuIntf && bDescriptorType == DT_DFU_FUNCTIONAL) {
-        let funcDesc = WebDFUDriver.parseFunctionalDescriptor(descData);
-        descriptors.push(funcDesc);
-        currIntf?.descriptors.push(funcDesc);
-      } else {
-        let desc = {
-          bLength: bLength,
-          bDescriptorType: bDescriptorType,
-          descData: descData,
-        } as WebDFUInterfaceSubDescriptor;
-        descriptors.push(desc);
-        if (currIntf) {
-          currIntf.descriptors.push(desc);
-        }
-      }
-      remainingData = new DataView(remainingData.buffer.slice(bLength));
-    }
-
-    return descriptors;
-  }
-
-  static parseConfigurationDescriptor(data: DataView) {
-    let descriptorData = new DataView(data.buffer.slice(9));
-    let descriptors = WebDFUDriver.parseSubDescriptors(descriptorData);
-
-    return {
-      bLength: data.getUint8(0),
-      bDescriptorType: data.getUint8(1),
-      wTotalLength: data.getUint16(2, true),
-      bNumInterfaces: data.getUint8(4),
-      bConfigurationValue: data.getUint8(5),
-      iConfiguration: data.getUint8(6),
-      bmAttributes: data.getUint8(7),
-      bMaxPower: data.getUint8(8),
-      descriptors: descriptors,
-    };
+    return this.poll_until((state: number) => state === idle_state);
   }
 }

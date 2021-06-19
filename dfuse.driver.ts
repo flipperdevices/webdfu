@@ -1,7 +1,7 @@
 import { DriverDFU } from "./dfu.driver";
 import { dfuCommands, WebDFUDriver } from "./base.driver";
 import { WebDFULog, WebDFUSettings } from "./types";
-import { WebDFUError } from "./core";
+import { parseDfuSeMemoryDescriptor, WebDFUError } from "./core";
 
 export type DFUseMemorySegment = {
   start: number;
@@ -19,53 +19,6 @@ export enum DFUseCommands {
   ERASE_SECTOR = 0x41,
 }
 
-function parseMemoryDescriptor(desc: string): { name: string; segments: DFUseMemorySegment[] } {
-  const nameEndIndex = desc.indexOf("/");
-  if (!desc.startsWith("@") || nameEndIndex == -1) {
-    throw new WebDFUError(`Not a DfuSe memory descriptor: "${desc}"`);
-  }
-
-  const name = desc.substring(1, nameEndIndex).trim();
-  const segmentString = desc.substring(nameEndIndex);
-
-  let segments = [];
-
-  const sectorMultipliers: Record<string, number> = {
-    " ": 1,
-    B: 1,
-    K: 1024,
-    M: 1048576,
-  };
-
-  let contiguousSegmentRegex = /\/\s*(0x[0-9a-fA-F]{1,8})\s*\/(\s*[0-9]+\s*\*\s*[0-9]+\s?[ BKM]\s*[abcdefg]\s*,?\s*)+/g;
-  let contiguousSegmentMatch: RegExpExecArray | null;
-  while ((contiguousSegmentMatch = contiguousSegmentRegex.exec(segmentString))) {
-    let segmentRegex = /([0-9]+)\s*\*\s*([0-9]+)\s?([ BKM])\s*([abcdefg])\s*,?\s*/g;
-    let startAddress = parseInt(contiguousSegmentMatch?.[1] ?? "", 16);
-    let segmentMatch: RegExpExecArray | null;
-    while ((segmentMatch = segmentRegex.exec(contiguousSegmentMatch[0]!))) {
-      let sectorCount = parseInt(segmentMatch[1]!, 10);
-      let sectorSize = parseInt(segmentMatch[2]!) * (sectorMultipliers[segmentMatch?.[3] ?? ""] ?? 0);
-      let properties = (segmentMatch?.[4] ?? "")?.charCodeAt(0) - "a".charCodeAt(0) + 1;
-
-      let segment = {
-        start: startAddress,
-        sectorSize: sectorSize,
-        end: startAddress + sectorSize * sectorCount,
-        readable: (properties & 0x1) != 0,
-        erasable: (properties & 0x2) != 0,
-        writable: (properties & 0x4) != 0,
-      };
-
-      segments.push(segment);
-
-      startAddress += sectorSize * sectorCount;
-    }
-  }
-
-  return { name, segments };
-}
-
 export class DriverDFUse extends WebDFUDriver {
   startAddress: number = NaN;
   memoryInfo?: { name: string; segments: DFUseMemorySegment[] };
@@ -74,7 +27,7 @@ export class DriverDFUse extends WebDFUDriver {
     super(device, settings, log);
 
     if (this.settings.name) {
-      this.memoryInfo = parseMemoryDescriptor(this.settings.name);
+      this.memoryInfo = parseDfuSeMemoryDescriptor(this.settings.name);
     }
   }
 
@@ -142,7 +95,7 @@ export class DriverDFUse extends WebDFUDriver {
         } else {
           return 0;
         }
-      } else if (segment.start == startAddr + numBytes) {
+      } else if (segment.start === startAddr + numBytes) {
         // Include a contiguous segment
         if (segment.readable) {
           numBytes += segment.end - segment.start;
@@ -185,7 +138,6 @@ export class DriverDFUse extends WebDFUDriver {
 
       const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
       const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
-      this.logDebug(`Erasing ${segment.sectorSize}B at 0x${sectorAddr.toString(16)}`);
       await this.dfuseCommand(DFUseCommands.ERASE_SECTOR, sectorAddr, 4);
       addr = sectorAddr + segment.sectorSize;
       bytesErased += segment.sectorSize;
@@ -226,20 +178,17 @@ export class DriverDFUse extends WebDFUDriver {
       let dfu_status;
       try {
         await this.dfuseCommand(DFUseCommands.SET_ADDRESS, address, 4);
-        this.logDebug(`Set address to 0x${address.toString(16)}`);
-        bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
-        this.logDebug("Sent " + bytes_written + " bytes");
+        bytes_written = await this.write(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
         address += chunk_size;
       } catch (error) {
-        throw new WebDFUError("Error during DfuSe download: " + error);
+        throw new WebDFUError("Error during DfuSe write: " + error);
       }
 
       if (dfu_status.status != dfuCommands.STATUS_OK) {
-        throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
+        throw new WebDFUError(`DFU WRITE failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
-      this.logDebug("Wrote " + bytes_written + " bytes");
       bytes_sent += bytes_written;
 
       this.logProgress(bytes_sent, expected_size);
@@ -249,13 +198,13 @@ export class DriverDFUse extends WebDFUDriver {
     this.logInfo("Manifesting new firmware");
     try {
       await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
-      await this.download(new ArrayBuffer(0), 0);
+      await this.write(new ArrayBuffer(0), 0);
     } catch (error) {
       throw new WebDFUError("Error during DfuSe manifestation: " + error);
     }
 
     try {
-      await this.poll_until((state) => state == dfuCommands.dfuMANIFEST);
+      await this.poll_until((state) => state === dfuCommands.dfuMANIFEST);
     } catch (error) {
       this.logError(error);
     }
@@ -273,7 +222,7 @@ export class DriverDFUse extends WebDFUDriver {
         throw new WebDFUError("Unknown memory segments");
       }
       this.logWarning("Using inferred start address 0x" + startAddress.toString(16));
-    } else if (this.getSegment(startAddress) === null) {
+    } else if (!this.getSegment(startAddress)) {
       this.logWarning(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
     }
 
@@ -301,16 +250,16 @@ export class DriverDFUse extends WebDFUDriver {
     let payload = new ArrayBuffer(len + 1);
     let view = new DataView(payload);
     view.setUint8(0, command);
-    if (len == 1) {
+    if (len === 1) {
       view.setUint8(1, param);
-    } else if (len == 4) {
+    } else if (len === 4) {
       view.setUint32(1, param, true);
     } else {
       throw new WebDFUError("Don't know how to handle data of len " + len);
     }
 
     try {
-      await this.download(payload, 0);
+      await this.write(payload, 0);
     } catch (error) {
       throw new WebDFUError("Error during special DfuSe command " + commandNames[command] + ":" + error);
     }

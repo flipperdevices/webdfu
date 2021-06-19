@@ -16,8 +16,7 @@ export class DriverDFU extends WebDFUDriver {
     let bytes_to_read;
     do {
       bytes_to_read = Math.min(xfer_size, max_size - bytes_read);
-      result = await this.upload(bytes_to_read, transaction++);
-      this.logDebug("Read " + result.byteLength + " bytes");
+      result = await this.read(bytes_to_read, transaction++);
       if (result.byteLength > 0) {
         blocks.push(result);
         bytes_read += result.byteLength;
@@ -43,8 +42,6 @@ export class DriverDFU extends WebDFUDriver {
     let expected_size = data.byteLength;
     let transaction = 0;
 
-    this.logInfo("Copying data from browser to DFU device");
-
     // Initialize progress to 0
     this.logProgress(bytes_sent, expected_size);
 
@@ -55,28 +52,25 @@ export class DriverDFU extends WebDFUDriver {
       let bytes_written = 0;
       let dfu_status;
       try {
-        bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), transaction++);
-        this.logDebug("Sent " + bytes_written + " bytes");
+        bytes_written = await this.write(data.slice(bytes_sent, bytes_sent + chunk_size), transaction++);
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
       } catch (error) {
-        throw new WebDFUError("Error during DFU download: " + error);
+        throw new WebDFUError("Error during DFU write: " + error);
       }
 
       if (dfu_status.status != dfuCommands.STATUS_OK) {
-        throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
+        throw new WebDFUError(`DFU WRITE failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
-      this.logDebug("Wrote " + bytes_written + " bytes");
       bytes_sent += bytes_written;
 
       this.logProgress(bytes_sent, expected_size);
     }
 
-    this.logDebug("Sending empty block");
     try {
-      await this.download(new ArrayBuffer(0), transaction++);
+      await this.write(new ArrayBuffer(0), transaction++);
     } catch (error) {
-      throw new WebDFUError("Error during final DFU download: " + error);
+      throw new WebDFUError("Error during final DFU write: " + error);
     }
 
     this.logInfo("Wrote " + bytes_sent + " bytes");
@@ -92,7 +86,7 @@ export class DriverDFU extends WebDFUDriver {
           (state) => state == dfuCommands.dfuIDLE || state == dfuCommands.dfuMANIFEST_WAIT_RESET
         );
         if (dfu_status.state == dfuCommands.dfuMANIFEST_WAIT_RESET) {
-          this.logDebug("Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant");
+          await this.device.reset();
         }
         if (dfu_status.status != dfuCommands.STATUS_OK) {
           throw new WebDFUError(`DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`);
@@ -107,27 +101,18 @@ export class DriverDFU extends WebDFUDriver {
           throw new WebDFUError("Error during DFU manifest: " + error);
         }
       }
-    } else {
-      // Try polling once to initiate manifestation
-      try {
-        let final_status = await this.getStatus();
-        this.logDebug(`Final DFU status: state=${final_status.state}, status=${final_status.status}`);
-      } catch (error) {
-        this.logDebug("Manifest GET_STATUS poll error: " + error);
-      }
     }
 
     // Reset to exit MANIFEST_WAIT_RESET
     try {
       await this.device.reset();
     } catch (error) {
+      // Ignore reset error
       if (
-        error == "NetworkError: Unable to reset the device." ||
-        error == "NotFoundError: Device unavailable." ||
-        error == "NotFoundError: The device was disconnected."
+        error !== "NetworkError: Unable to reset the device." &&
+        error !== "NotFoundError: Device unavailable." &&
+        error !== "NotFoundError: The device was disconnected."
       ) {
-        this.logDebug("Ignored reset error");
-      } else {
         throw new WebDFUError("Error during reset for manifestation: " + error);
       }
     }

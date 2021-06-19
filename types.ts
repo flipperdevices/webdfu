@@ -54,12 +54,6 @@ export type WebDFUInterfaceSubDescriptor = {
   bcdDFUVersion: number;
 };
 
-export type WebDFUEvent = {
-  init: () => void;
-  connect: () => void;
-  disconnect: (error?: Error) => void;
-};
-
 export type WebDFUOptions = {
   forceInterfacesName?: boolean;
 };
@@ -67,15 +61,15 @@ export type WebDFUOptions = {
 export type WebDFUProperties = {
   WillDetach: boolean;
   ManifestationTolerant: boolean;
-  CanUpload: boolean;
-  CanDnload: boolean;
+  CanRead: boolean;
+  CanWrite: boolean;
   TransferSize: number;
   DetachTimeOut: number;
   DFUVersion: number;
 };
 
 export type WebDFULog = Partial<
-  Record<"debug" | "info" | "warning" | "error", (msg: string) => void> & {
+  Record<"info" | "warning" | "error", (msg: string) => void> & {
     progress: (done: number, total?: number) => void;
   }
 >;

@@ -1,24 +1,29 @@
 import { createNanoEvents } from "nanoevents";
 
 import {
-  WebDFUSettings,
-  WebDFUEvent,
+  WebDFUInterfaceDescriptor,
+  WebDFUInterfaceSubDescriptor,
+  WebDFULog,
   WebDFUOptions,
   WebDFUProperties,
+  WebDFUSettings,
   WebDFUType,
-  WebDFULog,
-  WebDFUInterfaceSubDescriptor,
-  WebDFUInterfaceDescriptor,
 } from "./types";
 import { WebDFUDriver } from "./base.driver";
 import { DriverDFU } from "./dfu.driver";
 import { DriverDFUse } from "./dfuse.driver";
-import { WebDFUError } from "./core";
+import { checkDFUInterface, parseConfigurationDescriptor, WebDFUDriverType, WebDFUError } from "./core";
 
 export * from "./types";
 export * from "./base.driver";
 export * from "./dfu.driver";
 export * from "./dfuse.driver";
+
+export type WebDFUEvent = {
+  init: () => void;
+  connect: () => void;
+  disconnect: (error?: Error) => void;
+};
 
 export class WebDFU {
   events = createNanoEvents<WebDFUEvent>();
@@ -33,24 +38,28 @@ export class WebDFU {
     private readonly log?: WebDFULog
   ) {}
 
-  get type(): number {
+  /**
+   * Return the current driver type
+   */
+  get type(): WebDFUDriverType {
     if (this.properties?.DFUVersion == 0x011a && this.driver?.settings.alternate.interfaceProtocol == 0x02) {
-      return WebDFUType.SDFUse;
+      return WebDFUDriverType.DfuSe;
     }
 
-    return WebDFUType.DFU;
+    return WebDFUDriverType.Dfu;
   }
 
   async init(): Promise<void> {
-    this.interfaces = await this.findDfuInterfaces();
-    this.events.emit("init");
-  }
-
-  async connect(interfaceIndex: number): Promise<void> {
     if (!this.device.opened) {
       await this.device.open();
     }
 
+    this.interfaces = await this.findDfuInterfaces();
+
+    this.events.emit("init");
+  }
+
+  async connect(interfaceIndex: number): Promise<void> {
     // Attempt to parse the DFU functional descriptor
     let desc: WebDFUProperties | null = null;
     try {
@@ -104,7 +113,7 @@ export class WebDFU {
   private async getDFUDescriptorProperties(): Promise<WebDFUProperties | null> {
     const data = await this.readConfigurationDescriptor(0);
 
-    let configDesc = WebDFUDriver.parseConfigurationDescriptor(data);
+    let configDesc = parseConfigurationDescriptor(data);
     let funcDesc: WebDFUInterfaceSubDescriptor | null = null;
     let configValue = this.device.configuration?.configurationValue;
     if (configDesc.bConfigurationValue == configValue) {
@@ -121,10 +130,10 @@ export class WebDFU {
     }
 
     return {
-      WillDetach: (funcDesc.bmAttributes & 0x08) != 0,
+      CanWrite: (funcDesc.bmAttributes & 0x01) != 0,
+      CanRead: (funcDesc.bmAttributes & 0x02) != 0,
       ManifestationTolerant: (funcDesc.bmAttributes & 0x04) != 0,
-      CanUpload: (funcDesc.bmAttributes & 0x02) != 0,
-      CanDnload: (funcDesc.bmAttributes & 0x01) != 0,
+      WillDetach: (funcDesc.bmAttributes & 0x08) != 0,
       TransferSize: funcDesc.wTransferSize,
       DetachTimeOut: funcDesc.wDetachTimeOut,
       DFUVersion: funcDesc.bcdDFUVersion,
@@ -133,113 +142,41 @@ export class WebDFU {
 
   private async findDfuInterfaces(): Promise<WebDFUSettings[]> {
     const interfaces = [];
+    let forceInterfaceMameMapping = null;
 
-    for (let conf of this.device.configurations) {
-      for (let intf of conf.interfaces) {
-        for (let alt of intf.alternates) {
-          if (
-            alt.interfaceClass == 0xfe &&
-            alt.interfaceSubclass == 0x01 &&
-            (alt.interfaceProtocol == 0x01 || alt.interfaceProtocol == 0x02)
-          ) {
+    for (let configuration of this.device.configurations) {
+      for (let intf of configuration.interfaces) {
+        for (let alternate of intf.alternates) {
+          if (checkDFUInterface(alternate)) {
+            let name = alternate.interfaceName;
+
+            if (!name && this.settings.forceInterfacesName) {
+              if (!forceInterfaceMameMapping) {
+                await this.device.open();
+                await this.device.selectConfiguration(1);
+
+                forceInterfaceMameMapping = await this.readInterfaceNames();
+              }
+
+              let configIndex = configuration.configurationValue;
+              let intfNumber = intf.interfaceNumber;
+              let alt = alternate.alternateSetting;
+
+              name = forceInterfaceMameMapping[configIndex]?.[intfNumber]?.[alt]?.toString();
+            }
+
             interfaces.push({
-              configuration: conf,
+              name,
+              configuration,
               interface: intf,
-              alternate: alt,
-              name: alt.interfaceName,
+              alternate: alternate,
             });
           }
         }
       }
     }
 
-    if (this.settings.forceInterfacesName) {
-      // Need force
-      await this.fixInterfaceNames(interfaces);
-    }
-
     return interfaces;
-  }
-
-  private async fixInterfaceNames(interfaces: WebDFUSettings[]) {
-    // Check if any interface names were not read correctly
-    if (interfaces.some((intf) => intf.name == null)) {
-      await this.device.open();
-      await this.device.selectConfiguration(1);
-
-      let mapping = await this.readInterfaceNames();
-
-      for (let intf of interfaces) {
-        if (intf.name === null) {
-          let configIndex = intf.configuration.configurationValue;
-          let intfNumber = intf["interface"].interfaceNumber;
-          let alt = intf.alternate.alternateSetting;
-          intf.name = mapping?.[configIndex]?.[intfNumber]?.[alt]?.toString();
-        }
-      }
-    }
-  }
-
-  async readStringDescriptor(index: number, langID = 0) {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_STRING = 0x03;
-    const wValue = (DT_STRING << 8) | index;
-
-    const request_setup: USBControlTransferParameters = {
-      requestType: "standard",
-      recipient: "device",
-      request: GET_DESCRIPTOR,
-      value: wValue,
-      index: langID,
-    };
-
-    // Read enough for bLength
-    let result = await this.device.controlTransferIn(request_setup, 1);
-
-    if (result.data && result.status == "ok") {
-      // Retrieve the full descriptor
-      const bLength = result.data.getUint8(0);
-      result = await this.device.controlTransferIn(request_setup, bLength);
-      if (result.data && result.status == "ok") {
-        const len = (bLength - 2) / 2;
-        let u16_words = [];
-        for (let i = 0; i < len; i++) {
-          u16_words.push(result.data.getUint16(2 + i * 2, true));
-        }
-        if (langID == 0) {
-          // Return the langID array
-          return u16_words;
-        } else {
-          // Decode from UCS-2 into a string
-          return String.fromCharCode.apply(String, u16_words);
-        }
-      }
-    }
-
-    throw new WebDFUError(`Failed to read string descriptor ${index}: ${result.status}`);
-  }
-
-  async readDeviceDescriptor(): Promise<DataView> {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_DEVICE = 0x01;
-    const wValue = DT_DEVICE << 8;
-
-    const result = await this.device.controlTransferIn(
-      {
-        requestType: "standard",
-        recipient: "device",
-        request: GET_DESCRIPTOR,
-        value: wValue,
-        index: 0,
-      },
-      18
-    );
-
-    if (!result.data || result.status !== "ok") {
-      throw new WebDFUError(`Failed to read device descriptor: ${result.status}`);
-    }
-
-    return result.data;
   }
 
   async readInterfaceNames() {
@@ -247,17 +184,16 @@ export class WebDFU {
 
     let configs: Record<number, Record<number, Record<number, number>>> = {};
     let allStringIndices = new Set<any>();
+
     for (let configIndex = 0; configIndex < this.device.configurations.length; configIndex++) {
-      const rawConfig = await this.readConfigurationDescriptor(configIndex);
-      let configDesc = WebDFUDriver.parseConfigurationDescriptor(rawConfig);
-      let configValue = configDesc.bConfigurationValue;
+      const configDesc = parseConfigurationDescriptor(await this.readConfigurationDescriptor(configIndex));
+      const configValue = configDesc.bConfigurationValue;
+
       configs[configValue] = {};
 
       // Retrieve string indices for interface names
-      for (let desc of configDesc.descriptors) {
+      for (let desc of configDesc.descriptors as WebDFUInterfaceDescriptor[]) {
         if (desc.bDescriptorType === DT_INTERFACE) {
-          desc = desc as WebDFUInterfaceDescriptor;
-
           if (!configs[configValue]?.[desc.bInterfaceNumber]) {
             configs[configValue]![desc.bInterfaceNumber] = {};
           }
@@ -291,6 +227,68 @@ export class WebDFU {
     }
 
     return configs;
+  }
+
+  async readDeviceDescriptor(): Promise<DataView> {
+    const GET_DESCRIPTOR = 0x06;
+    const DT_DEVICE = 0x01;
+    const wValue = DT_DEVICE << 8;
+
+    const result = await this.device.controlTransferIn(
+      {
+        requestType: "standard",
+        recipient: "device",
+        request: GET_DESCRIPTOR,
+        value: wValue,
+        index: 0,
+      },
+      18
+    );
+
+    if (!result.data || result.status !== "ok") {
+      throw new WebDFUError(`Failed to read device descriptor: ${result.status}`);
+    }
+
+    return result.data;
+  }
+
+  async readStringDescriptor(index: number, langID = 0) {
+    const GET_DESCRIPTOR = 0x06;
+    const DT_STRING = 0x03;
+    const wValue = (DT_STRING << 8) | index;
+
+    const request_setup: USBControlTransferParameters = {
+      requestType: "standard",
+      recipient: "device",
+      request: GET_DESCRIPTOR,
+      value: wValue,
+      index: langID,
+    };
+
+    // Read enough for bLength
+    let result = await this.device.controlTransferIn(request_setup, 1);
+
+    if (result.data && result.status == "ok") {
+      // Retrieve the full descriptor
+      const bLength = result.data.getUint8(0);
+      result = await this.device.controlTransferIn(request_setup, bLength);
+      if (result.data && result.status == "ok") {
+        const len = (bLength - 2) / 2;
+        let u16_words = [];
+        for (let i = 0; i < len; i++) {
+          u16_words.push(result.data.getUint16(2 + i * 2, true));
+        }
+        if (!langID) {
+          // Return the langID array
+          return u16_words;
+        } else {
+          // Decode from UCS-2 into a string
+          return String.fromCharCode.apply(String, u16_words);
+        }
+      }
+    }
+
+    throw new WebDFUError(`Failed to read string descriptor ${index}: ${result.status}`);
   }
 
   async readConfigurationDescriptor(index: number): Promise<DataView> {

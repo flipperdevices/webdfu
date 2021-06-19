@@ -6,7 +6,7 @@
 WebDFU — driver for working with DFU and DfuseDriver in a browser over [Web USB](https://wicg.github.io/webusb/) or [Web Bluetooth](https://webbluetoothcg.github.io/web-bluetooth/).
 
 - Reading and writing the current device firmware by [DFU 1.1](https://www.usb.org/sites/default/files/DFU_1.1.pdf)
-- [ST DfuSe](http://dfu-util.sourceforge.net/dfuse.html) download and upload firmware
+- [ST DfuSe](http://dfu-util.sourceforge.net/dfuse.html) read and write firmware
 - Switching from the runtime configuration to the DFU bootloader (DFU detach)
 
 ## Install
@@ -23,6 +23,12 @@ Basic example:
 
 ```javascript
 import { WebDFU } from "dfu";
+
+// Init connect:
+//   1. Request device by user
+//   2. Create the WebDFU instance
+//   3. Open connection
+//   4. Select interface
 
 async function connect() {
   // Load the device by WebUSB
@@ -41,8 +47,8 @@ async function connect() {
 
   console.log({
     Version: webdfu.properties.DFUVersion.toString(16),
-    CanUpload: webdfu.properties.CanUpload,
-    CanDownload: webdfu.properties.CanDnload,
+    CanRead: webdfu.properties.CanRead,
+    CanWrite: webdfu.properties.CanWrite,
     TransferSize: webdfu.properties.TransferSize,
     DetachTimeOut: webdfu.properties.DetachTimeOut,
   });
