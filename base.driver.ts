@@ -10,7 +10,7 @@ import { WebDFUError } from "./core";
 
 export const dfuCommands = {
   DETACH: 0x00,
-  DNLOAD: 0x01,
+  DOWNLOAD: 0x01,
   UPLOAD: 0x02,
   GETSTATUS: 0x03,
   CLRSTATUS: 0x04,
@@ -21,9 +21,9 @@ export const dfuCommands = {
   appDETACH: 1,
 
   dfuIDLE: 2,
-  dfuDNLOAD_SYNC: 3,
+  dfuDOWNLOAD_SYNC: 3,
   dfuDNBUSY: 4,
-  dfuDNLOAD_IDLE: 5,
+  dfuDOWNLOAD_IDLE: 5,
   dfuMANIFEST_SYNC: 6,
   dfuMANIFEST: 7,
   dfuMANIFEST_WAIT_RESET: 8,
@@ -104,7 +104,7 @@ export abstract class WebDFUDriver {
   }
 
   protected download(data: ArrayBuffer, blockNum: number) {
-    return this.requestOut(dfuCommands.DNLOAD, data, blockNum);
+    return this.requestOut(dfuCommands.DOWNLOAD, data, blockNum);
   }
 
   protected upload(length: number, blockNum: number) {

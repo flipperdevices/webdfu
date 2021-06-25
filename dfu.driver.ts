@@ -57,7 +57,7 @@ export class DriverDFU extends WebDFUDriver {
       try {
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), transaction++);
         this.logDebug("Sent " + bytes_written + " bytes");
-        dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
+        dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
       } catch (error) {
         throw new WebDFUError("Error during DFU download: " + error);
       }

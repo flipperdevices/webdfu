@@ -68,7 +68,7 @@ export type WebDFUProperties = {
   WillDetach: boolean;
   ManifestationTolerant: boolean;
   CanUpload: boolean;
-  CanDnload: boolean;
+  CanDownload: boolean;
   TransferSize: number;
   DetachTimeOut: number;
   DFUVersion: number;

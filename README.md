@@ -42,7 +42,7 @@ async function connect() {
   console.log({
     Version: webdfu.properties.DFUVersion.toString(16),
     CanUpload: webdfu.properties.CanUpload,
-    CanDownload: webdfu.properties.CanDnload,
+    CanDownload: webdfu.properties.CanDownload,
     TransferSize: webdfu.properties.TransferSize,
     DetachTimeOut: webdfu.properties.DetachTimeOut,
   });

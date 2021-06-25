@@ -124,7 +124,7 @@ export class WebDFU {
       WillDetach: (funcDesc.bmAttributes & 0x08) != 0,
       ManifestationTolerant: (funcDesc.bmAttributes & 0x04) != 0,
       CanUpload: (funcDesc.bmAttributes & 0x02) != 0,
-      CanDnload: (funcDesc.bmAttributes & 0x01) != 0,
+      CanDownload: (funcDesc.bmAttributes & 0x01) != 0,
       TransferSize: funcDesc.wTransferSize,
       DetachTimeOut: funcDesc.wDetachTimeOut,
       DFUVersion: funcDesc.bcdDFUVersion,

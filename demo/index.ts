@@ -124,7 +124,7 @@ async function connect(interfaceIndex: number) {
       `WillDetach=${webdfu.properties.WillDetach}`,
       `ManifestationTolerant=${webdfu.properties.ManifestationTolerant}`,
       `CanUpload=${webdfu.properties.CanUpload}`,
-      `CanDownload=${webdfu.properties.CanDnload}`,
+      `CanDownload=${webdfu.properties.CanDownload}`,
       `TransferSize=${webdfu.properties.TransferSize}`,
       `DetachTimeOut=${webdfu.properties.DetachTimeOut}`,
       `Version=${hex4(webdfu.properties.DFUVersion)}`,
@@ -134,7 +134,7 @@ async function connect(interfaceIndex: number) {
     transferSizeField.value = webdfu.properties.TransferSize.toString();
     transferSize = webdfu.properties.TransferSize;
 
-    if (webdfu.properties.CanDnload) {
+    if (webdfu.properties.CanDownload) {
       manifestationTolerant = webdfu.properties.ManifestationTolerant;
     }
 
@@ -144,7 +144,7 @@ async function connect(interfaceIndex: number) {
         dfuseUploadSizeField.disabled = true;
       }
 
-      if (!desc.CanDnload) {
+      if (!desc.CanDownload) {
         downloadButton.disabled = true;
       }
     }

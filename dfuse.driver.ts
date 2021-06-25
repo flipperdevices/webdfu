@@ -229,7 +229,7 @@ export class DriverDFUse extends WebDFUDriver {
         this.logDebug(`Set address to 0x${address.toString(16)}`);
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
         this.logDebug("Sent " + bytes_written + " bytes");
-        dfu_status = await this.poll_until_idle(dfuCommands.dfuDNLOAD_IDLE);
+        dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
         address += chunk_size;
       } catch (error) {
         throw new WebDFUError("Error during DfuSe download: " + error);
