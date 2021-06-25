@@ -38,13 +38,11 @@ export abstract class WebDFUDriver {
 
   logInfo: (msg: string) => void;
   logWarning: (msg: string) => void;
-  logError: (msg: string) => void;
   logProgress: (done: number, total?: number) => void;
 
   constructor(public device: USBDevice, public settings: WebDFUSettings, log?: WebDFULog) {
     this.logInfo = log?.info ?? (() => {});
     this.logWarning = log?.warning ?? (() => {});
-    this.logError = log?.error ?? (() => {});
     this.logProgress = log?.progress ?? (() => {});
   }
 

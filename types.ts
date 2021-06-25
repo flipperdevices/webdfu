@@ -75,7 +75,7 @@ export type WebDFUProperties = {
 };
 
 export type WebDFULog = Partial<
-  Record<"debug" | "info" | "warning" | "error", (msg: string) => void> & {
+  Record<"info" | "warning", (msg: string) => void> & {
     progress: (done: number, total?: number) => void;
   }
 >;

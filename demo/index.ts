@@ -277,7 +277,6 @@ connectButton.addEventListener("click", function () {
         {
           info: logInfo,
           warning: logWarning,
-          error: logError,
           progress: logProgress,
         }
       );

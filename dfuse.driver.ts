@@ -203,15 +203,19 @@ export class DriverDFUse extends WebDFUDriver {
     let expected_size = data.byteLength;
 
     let startAddress: number | undefined = this.startAddress;
+
     if (isNaN(startAddress)) {
       startAddress = this.memoryInfo.segments[0]?.start;
+
       if (!startAddress) {
         throw new WebDFUError("startAddress not found");
       }
+
       this.logWarning("Using inferred start address 0x" + startAddress.toString(16));
     } else if (this.getSegment(startAddress) === null) {
-      this.logError(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
+      throw new WebDFUError(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
     }
+
     await this.erase(startAddress, expected_size);
 
     this.logInfo("Copying data from browser to DFU device");
@@ -250,11 +254,7 @@ export class DriverDFUse extends WebDFUDriver {
       throw new WebDFUError("Error during DfuSe manifestation: " + error);
     }
 
-    try {
-      await this.poll_until((state) => state == dfuCommands.dfuMANIFEST);
-    } catch (error) {
-      this.logError(error);
-    }
+    await this.poll_until((state) => state == dfuCommands.dfuMANIFEST);
   }
 
   async do_read(xfer_size: number, max_size = Infinity) {
