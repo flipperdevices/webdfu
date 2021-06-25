@@ -36,14 +36,12 @@ export const dfuCommands = {
 export abstract class WebDFUDriver {
   connected: boolean = false;
 
-  logDebug: (msg: string) => void;
   logInfo: (msg: string) => void;
   logWarning: (msg: string) => void;
   logError: (msg: string) => void;
   logProgress: (done: number, total?: number) => void;
 
   constructor(public device: USBDevice, public settings: WebDFUSettings, log?: WebDFULog) {
-    this.logDebug = log?.debug ?? (() => {});
     this.logInfo = log?.info ?? (() => {});
     this.logWarning = log?.warning ?? (() => {});
     this.logError = log?.error ?? (() => {});
@@ -230,11 +228,8 @@ export abstract class WebDFUDriver {
   async poll_until(state_predicate: (state: number) => boolean) {
     let dfu_status = await this.getStatus();
 
-    let device = this;
-
     function async_sleep(duration_ms: number) {
       return new Promise((resolve) => {
-        device.logDebug("Sleeping for " + duration_ms + "ms");
         setTimeout(resolve, duration_ms);
       });
     }

@@ -185,7 +185,6 @@ export class DriverDFUse extends WebDFUDriver {
 
       const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
       const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
-      this.logDebug(`Erasing ${segment.sectorSize}B at 0x${sectorAddr.toString(16)}`);
       await this.dfuseCommand(DFUseCommands.ERASE_SECTOR, sectorAddr, 4);
       addr = sectorAddr + segment.sectorSize;
       bytesErased += segment.sectorSize;
@@ -226,9 +225,7 @@ export class DriverDFUse extends WebDFUDriver {
       let dfu_status;
       try {
         await this.dfuseCommand(DFUseCommands.SET_ADDRESS, address, 4);
-        this.logDebug(`Set address to 0x${address.toString(16)}`);
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
-        this.logDebug("Sent " + bytes_written + " bytes");
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
         address += chunk_size;
       } catch (error) {
@@ -239,7 +236,6 @@ export class DriverDFUse extends WebDFUDriver {
         throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
-      this.logDebug("Wrote " + bytes_written + " bytes");
       bytes_sent += bytes_written;
 
       this.logProgress(bytes_sent, expected_size);

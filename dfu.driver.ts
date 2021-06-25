@@ -17,7 +17,6 @@ export class DriverDFU extends WebDFUDriver {
     do {
       bytes_to_read = Math.min(xfer_size, max_size - bytes_read);
       result = await this.upload(bytes_to_read, transaction++);
-      this.logDebug("Read " + result.byteLength + " bytes");
       if (result.byteLength > 0) {
         blocks.push(result);
         bytes_read += result.byteLength;
@@ -56,7 +55,6 @@ export class DriverDFU extends WebDFUDriver {
       let dfu_status;
       try {
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), transaction++);
-        this.logDebug("Sent " + bytes_written + " bytes");
         dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
       } catch (error) {
         throw new WebDFUError("Error during DFU download: " + error);
@@ -66,13 +64,11 @@ export class DriverDFU extends WebDFUDriver {
         throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
-      this.logDebug("Wrote " + bytes_written + " bytes");
       bytes_sent += bytes_written;
 
       this.logProgress(bytes_sent, expected_size);
     }
 
-    this.logDebug("Sending empty block");
     try {
       await this.download(new ArrayBuffer(0), transaction++);
     } catch (error) {
@@ -91,9 +87,10 @@ export class DriverDFU extends WebDFUDriver {
         dfu_status = await this.poll_until(
           (state) => state == dfuCommands.dfuIDLE || state == dfuCommands.dfuMANIFEST_WAIT_RESET
         );
-        if (dfu_status.state == dfuCommands.dfuMANIFEST_WAIT_RESET) {
-          this.logDebug("Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant");
-        }
+
+        // if dfu_status.state == dfuCommands.dfuMANIFEST_WAIT_RESET
+        // => Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant
+
         if (dfu_status.status != dfuCommands.STATUS_OK) {
           throw new WebDFUError(`DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`);
         }
@@ -111,10 +108,9 @@ export class DriverDFU extends WebDFUDriver {
       // Try polling once to initiate manifestation
       try {
         let final_status = await this.getStatus();
-        this.logDebug(`Final DFU status: state=${final_status.state}, status=${final_status.status}`);
-      } catch (error) {
-        this.logDebug("Manifest GET_STATUS poll error: " + error);
-      }
+
+        this.logInfo(`Final DFU status: state=${final_status.state}, status=${final_status.status}`);
+      } catch (error) {}
     }
 
     // Reset to exit MANIFEST_WAIT_RESET
@@ -126,7 +122,7 @@ export class DriverDFU extends WebDFUDriver {
         error == "NotFoundError: Device unavailable." ||
         error == "NotFoundError: The device was disconnected."
       ) {
-        this.logDebug("Ignored reset error");
+        // Ignored reset error
       } else {
         throw new WebDFUError("Error during reset for manifestation: " + error);
       }

@@ -1,7 +1,7 @@
 import { saveAs } from "file-saver";
 import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "dfu";
 
-import { clearLog, logDebug, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
+import { clearLog, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
 // Utils
 function hex4(n: number) {
@@ -275,7 +275,6 @@ connectButton.addEventListener("click", function () {
           forceInterfacesName: true,
         },
         {
-          debug: logDebug,
           info: logInfo,
           warning: logWarning,
           error: logError,
