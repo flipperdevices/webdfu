@@ -29,6 +29,7 @@ export function logWarning(msg: string): void {
 }
 
 export function logError(msg: string): void {
+  console.error(msg);
   if (logContext) {
     const error = document.createElement("p");
     error.className = "error";

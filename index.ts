@@ -9,21 +9,17 @@ import {
   WebDFULog,
   WebDFUInterfaceSubDescriptor,
   WebDFUInterfaceDescriptor,
-} from "./types";
-import { WebDFUDriver } from "./base.driver";
-import { DriverDFU } from "./dfu.driver";
-import { DriverDFUse } from "./dfuse.driver";
-import { WebDFUError } from "./core";
+} from "./core";
+import { DriverDFU } from "./driver";
+import { parseConfigurationDescriptor, WebDFUError } from "./core";
 
-export * from "./types";
-export * from "./base.driver";
-export * from "./dfu.driver";
-export * from "./dfuse.driver";
+export * from "./core";
+export * from "./driver";
 
 export class WebDFU {
   events = createNanoEvents<WebDFUEvent>();
 
-  driver?: WebDFUDriver;
+  driver?: DriverDFU;
   interfaces: WebDFUSettings[] = [];
   properties?: WebDFUProperties;
 
@@ -66,14 +62,11 @@ export class WebDFU {
       throw new WebDFUError("Interface not found");
     }
 
+    console.log(this.log);
     this.driver = new DriverDFU(this.device, intrf, this.log);
 
     if (desc) {
       this.properties = desc;
-
-      if (this.type === WebDFUType.SDFUse) {
-        this.driver = new DriverDFUse(this.device, intrf, this.log);
-      }
     }
 
     try {
@@ -91,12 +84,28 @@ export class WebDFU {
     this.events.emit("disconnect");
   }
 
-  async read(xfer_size: number, max_size: number) {
-    return this.driver?.do_read(xfer_size, max_size);
+  read(xfer_size: number, max_size: number) {
+    if (!this.driver) {
+      throw new WebDFUError("Required initialized driver");
+    }
+
+    if (this.type === WebDFUType.SDFUse) {
+      return this.driver.do_dfuse_read(xfer_size, max_size);
+    }
+
+    return this.driver.do_read(xfer_size, max_size);
   }
 
   write(xfer_size: number, data: ArrayBuffer, manifestationTolerant: boolean) {
-    return this.driver?.do_write(xfer_size, data, manifestationTolerant);
+    if (!this.driver) {
+      throw new WebDFUError("Required initialized driver");
+    }
+
+    if (this.type === WebDFUType.SDFUse) {
+      return this.driver.do_dfuse_write(xfer_size, data);
+    }
+
+    return this.driver.do_write(xfer_size, data, manifestationTolerant);
   }
 
   // Attempt to read the DFU functional descriptor
@@ -104,7 +113,7 @@ export class WebDFU {
   private async getDFUDescriptorProperties(): Promise<WebDFUProperties | null> {
     const data = await this.readConfigurationDescriptor(0);
 
-    let configDesc = WebDFUDriver.parseConfigurationDescriptor(data);
+    let configDesc = parseConfigurationDescriptor(data);
     let funcDesc: WebDFUInterfaceSubDescriptor | null = null;
     let configValue = this.device.configuration?.configurationValue;
     if (configDesc.bConfigurationValue == configValue) {
@@ -249,7 +258,7 @@ export class WebDFU {
     let allStringIndices = new Set<any>();
     for (let configIndex = 0; configIndex < this.device.configurations.length; configIndex++) {
       const rawConfig = await this.readConfigurationDescriptor(configIndex);
-      let configDesc = WebDFUDriver.parseConfigurationDescriptor(rawConfig);
+      let configDesc = parseConfigurationDescriptor(rawConfig);
       let configValue = configDesc.bConfigurationValue;
       configs[configValue] = {};
 
@@ -272,6 +281,7 @@ export class WebDFU {
     }
 
     let strings: any = {};
+
     // Retrieve interface name strings
     for (let index of allStringIndices) {
       try {

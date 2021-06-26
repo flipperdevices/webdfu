@@ -1,5 +1,5 @@
 import { saveAs } from "file-saver";
-import { WebDFUDriver, WebDFUType, WebDFU, DriverDFUse } from "dfu";
+import { DriverDFU, WebDFUType, WebDFU } from "../index";
 
 import { clearLog, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
@@ -37,7 +37,7 @@ function niceSize(n: number) {
   }
 }
 
-function formatDFUSummary(device: WebDFUDriver) {
+function formatDFUSummary(device: DriverDFU) {
   const vid = hex4(device.device.vendorId);
   const pid = hex4(device.device.productId);
   const name = device.device.productName;
@@ -149,15 +149,14 @@ async function connect(interfaceIndex: number) {
       }
     }
 
-    console.log(WebDFUType);
-    if (webdfu.type === WebDFUType.SDFUse && webdfu.driver instanceof DriverDFUse) {
-      if (webdfu.driver.memoryInfo) {
+    if (webdfu.type === WebDFUType.SDFUse) {
+      if (webdfu.driver.dfuseMemoryInfo) {
         let totalSize = 0;
-        for (const segment of webdfu.driver.memoryInfo.segments) {
+        for (const segment of webdfu.driver.dfuseMemoryInfo.segments) {
           totalSize += segment.end - segment.start;
         }
-        memorySummary = `Selected memory region: ${webdfu.driver.memoryInfo.name} (${niceSize(totalSize)})`;
-        for (const segment of webdfu.driver.memoryInfo.segments) {
+        memorySummary = `Selected memory region: ${webdfu.driver.dfuseMemoryInfo.name} (${niceSize(totalSize)})`;
+        for (const segment of webdfu.driver.dfuseMemoryInfo.segments) {
           const properties = [];
           if (segment.readable) {
             properties.push("readable");
@@ -211,16 +210,16 @@ async function connect(interfaceIndex: number) {
     firmwareFileField.disabled = false;
   }
 
-  if (webdfu.driver instanceof DriverDFUse && webdfu.driver.memoryInfo) {
+  if (webdfu.type === WebDFUType.SDFUse && webdfu.driver.dfuseMemoryInfo) {
     const dfuseFieldsDiv = document.querySelector("#dfuseFields") as HTMLDivElement;
     dfuseFieldsDiv.hidden = false;
     dfuseStartAddressField.disabled = false;
     dfuseUploadSizeField.disabled = false;
-    const segment = webdfu.driver.getFirstWritableSegment();
+    const segment = webdfu.driver.getDfuseFirstWritableSegment();
     if (segment) {
-      webdfu.driver.startAddress = segment.start;
+      webdfu.driver.dfuseStartAddress = segment.start;
       dfuseStartAddressField.value = "0x" + segment.start.toString(16);
-      const maxReadSize = webdfu.driver.getMaxReadSize(segment.start);
+      const maxReadSize = webdfu.driver.getDfuseMaxReadSize(segment.start);
       dfuseUploadSizeField.value = maxReadSize.toString();
       dfuseUploadSizeField.max = maxReadSize.toString();
     }
@@ -243,12 +242,12 @@ dfuseStartAddressField.addEventListener("change", function (event) {
   const address = parseInt(field.value, 16);
   if (isNaN(address)) {
     field.setCustomValidity("Invalid hexadecimal start address");
-  } else if (webdfu?.driver && webdfu.driver instanceof DriverDFUse && webdfu?.driver?.memoryInfo) {
-    if (webdfu?.driver.getSegment(address) !== null) {
-      webdfu.driver.startAddress = address;
+  } else if (webdfu?.driver && webdfu.type === WebDFUType.SDFUse && webdfu?.driver?.dfuseMemoryInfo) {
+    if (webdfu?.driver.getDfuseSegment(address) !== null) {
+      webdfu.driver.dfuseStartAddress = address;
       field.setCustomValidity("");
-      if (webdfu?.driver && webdfu?.driver instanceof DriverDFUse) {
-        dfuseUploadSizeField.max = webdfu.driver.getMaxReadSize(address).toString();
+      if (webdfu?.driver && webdfu.type === WebDFUType.SDFUse) {
+        dfuseUploadSizeField.max = webdfu.driver.getDfuseMaxReadSize(address).toString();
       }
     } else {
       field.setCustomValidity("Address outside of memory map");
@@ -371,7 +370,7 @@ async function download(): Promise<void> {
     }
 
     try {
-      await webdfu?.driver.do_write(transferSize, firmwareFile, manifestationTolerant);
+      await webdfu.write(transferSize, firmwareFile, manifestationTolerant);
 
       logInfo("Done!");
       setLogContext(null);
