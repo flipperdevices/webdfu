@@ -41,7 +41,6 @@ export function logError(msg: string): void {
 export function logProgress(done: number, total?: number): void {
   if (logContext) {
     let progressBar: HTMLProgressElement | null = null;
-
     if (logContext?.lastElementChild?.tagName.toLowerCase() == "progress") {
       progressBar = logContext.lastElementChild as HTMLProgressElement;
     }
@@ -52,8 +51,7 @@ export function logProgress(done: number, total?: number): void {
     }
 
     progressBar.value = done;
-
-    if (typeof total !== "undefined") {
+    if (total !== undefined) {
       progressBar.max = total;
     }
   }

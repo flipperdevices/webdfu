@@ -13,6 +13,7 @@ import {
   DFUseMemorySegment,
   DFUseCommands,
 } from "./core";
+import { WebDFUProcessErase, WebDFUProcessRead, WebDFUProcessWrite } from "./process";
 import { parseConfigurationDescriptor, WebDFUError } from "./core";
 
 export * from "./core";
@@ -117,28 +118,53 @@ export class WebDFU {
     this.events.emit("disconnect");
   }
 
-  read(xfer_size: number, max_size: number) {
+  read(xferSize: number, maxSize: number): WebDFUProcessRead {
     if (!this) {
       throw new WebDFUError("Required initialized driver");
     }
 
-    if (this.type === WebDFUType.SDFUse) {
-      return this.do_dfuse_read(xfer_size, max_size);
+    const process = new WebDFUProcessRead();
+
+    try {
+      let blob: Promise<Blob>;
+      if (this.type === WebDFUType.SDFUse) {
+        blob = this.do_dfuse_read(process, xferSize, maxSize);
+      } else {
+        blob = this.do_read(process, xferSize, maxSize);
+      }
+
+      blob.then((data) => process.events.emit("end", data)).catch((error) => process.events.emit("error", error));
+    } catch (error) {
+      process.events.emit("error", error);
     }
 
-    return this.do_read(xfer_size, max_size);
+    return process;
   }
 
-  write(xfer_size: number, data: ArrayBuffer, manifestationTolerant: boolean) {
+  write(xfer_size: number, data: ArrayBuffer, manifestationTolerant: boolean): WebDFUProcessWrite {
     if (!this) {
       throw new WebDFUError("Required initialized driver");
     }
 
-    if (this.type === WebDFUType.SDFUse) {
-      return this.do_dfuse_write(xfer_size, data);
-    }
+    let process = new WebDFUProcessWrite();
 
-    return this.do_write(xfer_size, data, manifestationTolerant);
+    setTimeout(() => {
+      try {
+        let result: Promise<void>;
+
+        if (this.type === WebDFUType.SDFUse) {
+          result = this.do_dfuse_write(process, xfer_size, data);
+        } else {
+          result = this.do_write(process, xfer_size, data, manifestationTolerant);
+        }
+
+        result.then(() => process.events.emit("end")).catch((error) => process.events.emit("error", error));
+      } catch (error) {
+        process.events.on("error", error);
+      }
+    }, 0);
+
+    return process;
   }
 
   // Attempt to read the DFU functional descriptor
@@ -572,14 +598,18 @@ export class WebDFU {
     return this.poll_until((state: number) => state == idle_state);
   }
 
-  private async do_read(xfer_size: number, max_size = Infinity, first_block = 0): Promise<Blob> {
+  private async do_read(
+    process: WebDFUProcessRead,
+    xfer_size: number,
+    max_size = Infinity,
+    first_block = 0
+  ): Promise<Blob> {
     let transaction = first_block;
     let blocks = [];
     let bytes_read = 0;
 
-    this.log.info("Copying data from DFU device to browser");
     // Initialize progress to 0
-    this.log.progress(0);
+    process.events.emit("process", 0);
 
     let result;
     let bytes_to_read;
@@ -590,31 +620,31 @@ export class WebDFU {
         blocks.push(result);
         bytes_read += result.byteLength;
       }
-      if (Number.isFinite(max_size)) {
-        this.log.progress(bytes_read, max_size);
-      } else {
-        this.log.progress(bytes_read);
-      }
+
+      process.events.emit("process", bytes_read, Number.isFinite(max_size) ? max_size : undefined);
     } while (bytes_read < max_size && result.byteLength == bytes_to_read);
 
     if (bytes_read == max_size) {
       await this.abortToIdle();
     }
 
-    this.log.info(`Read ${bytes_read} bytes`);
-
     return new Blob(blocks, { type: "application/octet-stream" });
   }
 
-  private async do_write(xfer_size: number, data: ArrayBuffer, manifestationTolerant = true): Promise<void> {
+  private async do_write(
+    process: WebDFUProcessWrite,
+    xfer_size: number,
+    data: ArrayBuffer,
+    manifestationTolerant = true
+  ): Promise<void> {
     let bytes_sent = 0;
     let expected_size = data.byteLength;
     let transaction = 0;
 
-    this.log.info("Copying data from browser to DFU device");
+    process.events.emit("write/start");
 
     // Initialize progress to 0
-    this.log.progress(bytes_sent, expected_size);
+    process.events.emit("write/process", bytes_sent, expected_size);
 
     while (bytes_sent < expected_size) {
       const bytes_left = expected_size - bytes_sent;
@@ -635,7 +665,7 @@ export class WebDFU {
 
       bytes_sent += bytes_written;
 
-      this.log.progress(bytes_sent, expected_size);
+      process.events.emit("write/process", bytes_sent, expected_size);
     }
 
     try {
@@ -644,8 +674,7 @@ export class WebDFU {
       throw new WebDFUError("Error during final DFU download: " + error);
     }
 
-    this.log.info("Wrote " + bytes_sent + " bytes");
-    this.log.info("Manifesting new firmware");
+    process.events.emit("write/end", bytes_sent);
 
     if (manifestationTolerant) {
       // Transition to MANIFEST_SYNC state
@@ -676,9 +705,7 @@ export class WebDFU {
     } else {
       // Try polling once to initiate manifestation
       try {
-        let final_status = await this.getStatus();
-
-        this.log.info(`Final DFU status: state=${final_status.state}, status=${final_status.status}`);
+        await this.getStatus();
       } catch (error) {}
     }
 
@@ -699,12 +726,12 @@ export class WebDFU {
   }
 
   // DFUse specific
-  private async do_dfuse_write(xfer_size: number, data: ArrayBuffer) {
+  private async do_dfuse_write(process: WebDFUProcessWrite, xfer_size: number, data: ArrayBuffer) {
     if (!this.dfuseMemoryInfo || !this.dfuseMemoryInfo.segments) {
       throw new WebDFUError("No memory map available");
     }
 
-    this.log.info("Erasing DFU device memory");
+    process.events.emit("erase/start");
 
     let bytes_sent = 0;
     let expected_size = data.byteLength;
@@ -723,9 +750,23 @@ export class WebDFU {
       throw new WebDFUError(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
     }
 
-    await this.erase(startAddress, expected_size);
+    await new Promise<void>((resolve, reject) => {
+      if (!startAddress) {
+        reject(new WebDFUError("startAddress not found"));
+        return;
+      }
 
-    this.log.info("Copying data from browser to DFU device");
+      const ev = this.erase(startAddress, expected_size);
+
+      ev.events.on("process", (...args) => process.events.emit("erase/process", ...args));
+      ev.events.on("error", reject);
+      ev.events.on("end", () => {
+        process.events.emit("erase/end");
+        resolve();
+      });
+    });
+
+    process.events.emit("write/start");
 
     let address = startAddress;
     while (bytes_sent < expected_size) {
@@ -749,11 +790,11 @@ export class WebDFU {
 
       bytes_sent += bytes_written;
 
-      this.log.progress(bytes_sent, expected_size);
+      process.events.emit("write/process", bytes_sent, expected_size);
     }
-    this.log.info(`Wrote ${bytes_sent} bytes`);
 
-    this.log.info("Manifesting new firmware");
+    process.events.emit("write/end", bytes_sent);
+
     try {
       await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
       await this.download(new ArrayBuffer(0), 0);
@@ -764,7 +805,7 @@ export class WebDFU {
     await this.poll_until((state) => state == dfuCommands.dfuMANIFEST);
   }
 
-  private async do_dfuse_read(xfer_size: number, max_size = Infinity) {
+  private async do_dfuse_read(process: WebDFUProcessRead, xfer_size: number, max_size = Infinity) {
     if (!this.dfuseMemoryInfo) {
       throw new WebDFUError("Unknown a DfuSe memory info");
     }
@@ -780,7 +821,6 @@ export class WebDFU {
       this.log.warning(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
     }
 
-    this.log.info(`Reading up to 0x${max_size.toString(16)} bytes starting at 0x${startAddress.toString(16)}`);
     let state = await this.getState();
     if (state != dfuCommands.dfuIDLE) {
       await this.abortToIdle();
@@ -790,7 +830,7 @@ export class WebDFU {
 
     // DfuSe encodes the read address based on the transfer size,
     // the block number - 2, and the SET_ADDRESS pointer.
-    return await this.do_read(xfer_size, max_size, 2);
+    return await this.do_read(process, xfer_size, max_size, 2);
   }
 
   getDfuseSegment(addr: number): DFUseMemorySegment | null {
@@ -870,41 +910,49 @@ export class WebDFU {
     return segment.start + (sectorIndex + 1) * segment.sectorSize;
   }
 
-  private async erase(startAddr: number, length: number) {
-    let segment = this.getDfuseSegment(startAddr);
-    let addr = this.getDfuseSectorStart(startAddr, segment);
-    const endAddr = this.getDfuseSectorEnd(startAddr + length - 1);
+  private erase(startAddr: number, length: number): WebDFUProcessErase {
+    const process = new WebDFUProcessErase();
 
-    if (!segment) {
-      throw new WebDFUError("Unknown segment");
-    }
+    const that = this;
+    void (async function () {
+      let segment = that.getDfuseSegment(startAddr);
+      let addr = that.getDfuseSectorStart(startAddr, segment);
+      const endAddr = that.getDfuseSectorEnd(startAddr + length - 1);
 
-    let bytesErased = 0;
-    const bytesToErase = endAddr - addr;
-    if (bytesToErase > 0) {
-      this.log.progress(bytesErased, bytesToErase);
-    }
-
-    while (addr < endAddr) {
-      if ((segment?.end ?? 0) <= addr) {
-        segment = this.getDfuseSegment(addr);
+      if (!segment) {
+        throw new WebDFUError("Unknown segment");
       }
 
-      if (!segment?.erasable) {
-        // Skip over the non-erasable section
-        bytesErased = Math.min(bytesErased + (segment?.end ?? 0) - addr, bytesToErase);
-        addr = segment?.end ?? 0;
-        this.log.progress(bytesErased, bytesToErase);
-        continue;
+      let bytesErased = 0;
+      const bytesToErase = endAddr - addr;
+      if (bytesToErase > 0) {
+        process.events.emit("process", bytesErased, bytesToErase);
       }
 
-      const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
-      const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
-      await this.dfuseCommand(DFUseCommands.ERASE_SECTOR, sectorAddr, 4);
-      addr = sectorAddr + segment.sectorSize;
-      bytesErased += segment.sectorSize;
-      this.log.progress(bytesErased, bytesToErase);
-    }
+      while (addr < endAddr) {
+        if ((segment?.end ?? 0) <= addr) {
+          segment = that.getDfuseSegment(addr);
+        }
+
+        if (!segment?.erasable) {
+          // Skip over the non-erasable section
+          bytesErased = Math.min(bytesErased + (segment?.end ?? 0) - addr, bytesToErase);
+          addr = segment?.end ?? 0;
+        } else {
+          const sectorIndex = Math.floor((addr - segment.start) / segment.sectorSize);
+          const sectorAddr = segment.start + sectorIndex * segment.sectorSize;
+          await that.dfuseCommand(DFUseCommands.ERASE_SECTOR, sectorAddr, 4);
+          addr = sectorAddr + segment.sectorSize;
+          bytesErased += segment.sectorSize;
+        }
+
+        process.events.emit("process", bytesErased, bytesToErase);
+      }
+    })()
+      .then(() => process.events.emit("end"))
+      .catch((error) => process.events.emit("error", error));
+
+    return process;
   }
 
   private async dfuseCommand(command: number, param = 0x00, len = 1) {

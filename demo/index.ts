@@ -1,5 +1,5 @@
 import { saveAs } from "file-saver";
-import { WebDFUType, WebDFU } from "dfu";
+import { WebDFUType, WebDFU } from "dfu/index";
 
 import { clearLog, logError, logInfo, logProgress, logWarning, setLogContext } from "./log";
 
@@ -317,15 +317,31 @@ uploadButton.addEventListener("click", async function (event) {
       maxSize = parseInt(dfuseUploadSizeField.value);
     }
 
-    try {
-      const blob = await webdfu.read(transferSize, maxSize);
+    const process = webdfu.read(transferSize, maxSize);
 
-      saveAs(blob, "firmware.bin");
-    } catch (error) {
-      logError(error);
+    // after start
+    if (webdfu?.type === WebDFUType.SDFUse) {
+      logInfo(`Reading up to 0x${maxSize.toString(16)} bytes starting at 0x${webdfu.dfuseStartAddress.toString(16)}`);
     }
 
-    setLogContext(null);
+    logInfo("Copying data from DFU device to browser");
+
+    process.events.on("process", (done, total) => {
+      logProgress(done, total);
+    });
+
+    process.events.on("error", (error) => {
+      logError(error);
+      setLogContext(null);
+    });
+
+    process.events.on("end", (blob) => {
+      console.log("end?");
+      logInfo(`Read ${blob.size} bytes`);
+      setLogContext(null);
+
+      saveAs(blob, "firmware.bin");
+    });
   }
 
   return false;
@@ -363,27 +379,65 @@ async function download(): Promise<void> {
       logWarning("Failed to clear status");
     }
 
-    try {
-      await webdfu.write(transferSize, firmwareFile, manifestationTolerant);
+    let process = webdfu.write(transferSize, firmwareFile, manifestationTolerant);
 
+    // Erase
+    process.events.on("erase/start", () => {
+      console.log("erase/start!");
+      logInfo("Erasing DFU device memory");
+    });
+
+    process.events.on("erase/process", (bytesSent, expectedSize) => {
+      logProgress(bytesSent, expectedSize);
+    });
+
+    process.events.on("erase/end", () => {
+      logInfo("Success erased");
+    });
+
+    // Write firmware
+    process.events.on("write/start", () => {
+      logInfo("Copying data from browser to DFU device");
+    });
+
+    process.events.on("write/process", (bytesSent, expectedSize) => {
+      logProgress(bytesSent, expectedSize);
+    });
+
+    process.events.on("write/end", (bytes_sent: number) => {
+      logInfo(`Wrote ${bytes_sent} bytes`);
+      logInfo("Manifesting new firmware");
+
+      webdfu
+        ?.getStatus()
+        .then((status) => {
+          logInfo(`Final DFU status: state=${status.state}, status=${status.status}`);
+        })
+        .catch(() => {});
+    });
+
+    process.events.on("error", (error) => {
+      logError(error);
+      setLogContext(null);
+    });
+
+    process.events.on("end", () => {
       logInfo("Done!");
       setLogContext(null);
 
       if (!manifestationTolerant) {
-        try {
-          await webdfu.waitDisconnected(5000);
-
-          onDisconnect();
-          webdfu = null;
-        } catch (error) {
-          // It didn't reset and disconnect for some reason...
-          console.log("Device unexpectedly tolerated manifestation.");
-        }
+        webdfu
+          ?.waitDisconnected(5000)
+          .then(() => {
+            onDisconnect();
+            webdfu = null;
+          })
+          .catch(() => {
+            // It didn't reset and disconnect for some reason...
+            console.error("Device unexpectedly tolerated manifestation.");
+          });
       }
-    } catch (error) {
-      logError(error);
-      setLogContext(null);
-    }
+    });
   }
 }
 
