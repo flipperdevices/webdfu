@@ -51,7 +51,7 @@ async function connect() {
   try {
     const firmwareFile = await webdfu.read();
 
-    console.log("Readed: ", firmwareFile);
+    console.log("Read: ", firmwareFile);
   } catch (error) {
     console.error(error);
   }
@@ -62,7 +62,7 @@ async function connect() {
     const firmwareFile = new ArrayBuffer("");
     await webdfu.write(1024, firmwareFile);
 
-    console.log("Writed!");
+    console.log("Written!");
   } catch (error) {
     console.error(error);
   }
