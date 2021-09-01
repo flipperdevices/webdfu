@@ -746,7 +746,7 @@ export class WebDFU {
       }
 
       this.log.warning("Using inferred start address 0x" + startAddress.toString(16));
-    } else if (this.getDfuseSegment(startAddress) === null) {
+    } else if (this.getDfuseSegment(startAddress) === null && data.byteLength !== 0) {
       throw new WebDFUError(`Start address 0x${startAddress.toString(16)} outside of memory map bounds`);
     }
 
