@@ -379,7 +379,7 @@ async function download(): Promise<void> {
       logWarning("Failed to clear status");
     }
 
-    let process = webdfu.write(transferSize, firmwareFile, manifestationTolerant);
+    const process = webdfu.write(transferSize, firmwareFile, manifestationTolerant);
 
     // Erase
     process.events.on("erase/start", () => {
@@ -413,7 +413,9 @@ async function download(): Promise<void> {
         .then((status) => {
           logInfo(`Final DFU status: state=${status.state}, status=${status.status}`);
         })
-        .catch(() => {});
+        .catch((error) => {
+          logError(error);
+        });
     });
 
     process.events.on("error", (error) => {
