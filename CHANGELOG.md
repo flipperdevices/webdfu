@@ -2,6 +2,10 @@
 
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## 0.1.5
+
+- Allow empty commands
+
 ## 0.1.4
 
 - Fix the examples in doc
