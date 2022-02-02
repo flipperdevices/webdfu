@@ -168,6 +168,10 @@ export function parseDeviceDescriptor(data: DataView): WebDFUDeviceDescriptor {
   };
 }
 
+/**
+ * https://www.usb.org/sites/default/files/DFU_1.1.pdf
+ * Page 13, table 4.2: DFU Functional descriptor
+ */
 export function parseFunctionalDescriptor(data: DataView): WebDFUFunctionalDescriptor {
   return {
     bLength: data.getUint8(0),

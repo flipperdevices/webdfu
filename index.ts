@@ -18,7 +18,11 @@ import { parseConfigurationDescriptor, WebDFUError } from "./core";
 
 export * from "./core";
 
-export const dfuCommands = {
+/**
+ * List of USB DFU requests
+ * https://www.usb.org/sites/default/files/DFU_1.1.pdf page 10, table 3.2
+ */
+export const DFU_REQUEST = {
   DETACH: 0x00,
   DOWNLOAD: 0x01,
   UPLOAD: 0x02,
@@ -26,10 +30,15 @@ export const dfuCommands = {
   CLRSTATUS: 0x04,
   GETSTATE: 0x05,
   ABORT: 0x06,
+};
 
+/**
+ * List of USB DFU states
+ * https://www.usb.org/sites/default/files/DFU_1.1.pdf page 22
+ */
+const DFU_STATE = {
   appIDLE: 0,
   appDETACH: 1,
-
   dfuIDLE: 2,
   dfuDOWNLOAD_SYNC: 3,
   dfuDNBUSY: 4,
@@ -39,9 +48,42 @@ export const dfuCommands = {
   dfuMANIFEST_WAIT_RESET: 8,
   dfuUPLOAD_IDLE: 9,
   dfuERROR: 10,
+}
 
-  STATUS_OK: 0x0,
-};
+/**
+ * List of USB DFU statuses
+ * https://www.usb.org/sites/default/files/DFU_1.1.pdf page 21
+ */
+const DFU_STATUS = {
+  STATUS_OK: 0x00,
+}
+
+/**
+ * List of USB requests
+ * https://www.usb.org/sites/default/files/hid1_11.pdf
+ */
+const USB_REQUESTS = {
+  GET_DESCRIPTOR: 0x06 // page 59, chapter 7.1.1
+}
+
+/**
+ * List of USB descriptors
+ * https://www.usb.org/sites/default/files/hid1_11.pdf
+ */
+const USB_DESCRIPTOR_TYPES = {
+  DEVICE: 0x01, // page 66
+  CONFIGURATION: 0x02, // page 67
+  STRING: 0x03, // page 72
+  HID: 0x21 // page 68
+}
+
+/**
+ * LIst of USB Language IDs
+ * http://www.baiheee.com/Documents/090518/090518112619/USB_LANGIDs.pdf
+ */
+const USB_LANGUAGE_IDS = {
+  ENG_US: 0x0409 // English (United States)
+}
 
 export class WebDFU {
   events = createNanoEvents<WebDFUEvent>();
@@ -177,7 +219,7 @@ export class WebDFU {
     let configValue = this.device.configuration?.configurationValue;
     if (configDesc.bConfigurationValue == configValue) {
       for (let desc of configDesc.descriptors) {
-        if (desc.bDescriptorType == 0x21 && desc.hasOwnProperty("bcdDFUVersion")) {
+        if (desc.bDescriptorType == USB_DESCRIPTOR_TYPES.HID && desc.hasOwnProperty("bcdDFUVersion")) {
           funcDesc = desc as WebDFUInterfaceSubDescriptor;
           break;
         }
@@ -249,14 +291,12 @@ export class WebDFU {
   }
 
   private async readStringDescriptor(index: number, langID = 0) {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_STRING = 0x03;
-    const wValue = (DT_STRING << 8) | index;
+    const wValue = (USB_DESCRIPTOR_TYPES.STRING << 8) | index;
 
     const request_setup: USBControlTransferParameters = {
       requestType: "standard",
       recipient: "device",
-      request: GET_DESCRIPTOR,
+      request: USB_REQUESTS.GET_DESCRIPTOR,
       value: wValue,
       index: langID,
     };
@@ -289,15 +329,13 @@ export class WebDFU {
 
   // @ts-ignore
   private async readDeviceDescriptor(): Promise<DataView> {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_DEVICE = 0x01;
-    const wValue = DT_DEVICE << 8;
+    const wValue = USB_DESCRIPTOR_TYPES.DEVICE << 8;
 
     const result = await this.device.controlTransferIn(
       {
         requestType: "standard",
         recipient: "device",
-        request: GET_DESCRIPTOR,
+        request: USB_REQUESTS.GET_DESCRIPTOR,
         value: wValue,
         index: 0,
       },
@@ -345,7 +383,7 @@ export class WebDFU {
     // Retrieve interface name strings
     for (let index of allStringIndices) {
       try {
-        strings[index] = await this.readStringDescriptor(index, 0x0409);
+        strings[index] = await this.readStringDescriptor(index, USB_LANGUAGE_IDS.ENG_US);
       } catch (error) {
         console.log(error);
         strings[index] = null;
@@ -364,14 +402,12 @@ export class WebDFU {
   }
 
   private async readConfigurationDescriptor(index: number): Promise<DataView> {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_CONFIGURATION = 0x02;
-    const wValue = (DT_CONFIGURATION << 8) | index;
+    const wValue = (USB_DESCRIPTOR_TYPES.CONFIGURATION << 8) | index;
 
     const setup: USBControlTransferParameters = {
       requestType: "standard",
       recipient: "device",
-      request: GET_DESCRIPTOR,
+      request: USB_REQUESTS.GET_DESCRIPTOR,
       value: wValue,
       index: 0,
     };
@@ -423,11 +459,11 @@ export class WebDFU {
   }
 
   detach() {
-    return this.requestOut(dfuCommands.DETACH, undefined, 1000);
+    return this.requestOut(DFU_REQUEST.DETACH, undefined, 1000);
   }
 
   abort() {
-    return this.requestOut(dfuCommands.ABORT);
+    return this.requestOut(DFU_REQUEST.ABORT);
   }
 
   async waitDisconnected(timeout: number) {
@@ -472,21 +508,21 @@ export class WebDFU {
         return true;
       }
 
-      return state?.state == dfuCommands.dfuERROR;
+      return state?.state == DFU_STATE.dfuERROR;
     } catch (_) {
       return true;
     }
   }
 
   getState() {
-    return this.requestIn(dfuCommands.GETSTATE, 1).then(
+    return this.requestIn(DFU_REQUEST.GETSTATE, 1).then(
       (data) => Promise.resolve(data.getUint8(0)),
       (error) => Promise.reject("DFU GETSTATE failed: " + error)
     );
   }
 
   getStatus() {
-    return this.requestIn(dfuCommands.GETSTATUS, 6).then(
+    return this.requestIn(DFU_REQUEST.GETSTATUS, 6).then(
       (data) =>
         Promise.resolve({
           status: data.getUint8(0),
@@ -498,7 +534,7 @@ export class WebDFU {
   }
 
   clearStatus() {
-    return this.requestOut(dfuCommands.CLRSTATUS);
+    return this.requestOut(DFU_REQUEST.CLRSTATUS);
   }
 
   /* Driver options */
@@ -557,22 +593,22 @@ export class WebDFU {
   }
 
   private download(data: ArrayBuffer, blockNum: number) {
-    return this.requestOut(dfuCommands.DOWNLOAD, data, blockNum);
+    return this.requestOut(DFU_REQUEST.DOWNLOAD, data, blockNum);
   }
 
   private upload(length: number, blockNum: number) {
-    return this.requestIn(dfuCommands.UPLOAD, length, blockNum);
+    return this.requestIn(DFU_REQUEST.UPLOAD, length, blockNum);
   }
 
   // IDLE
   private async abortToIdle() {
     await this.abort();
     let state = await this.getState();
-    if (state == dfuCommands.dfuERROR) {
+    if (state == DFU_STATE.dfuERROR) {
       await this.clearStatus();
       state = await this.getState();
     }
-    if (state != dfuCommands.dfuIDLE) {
+    if (state != DFU_STATE.dfuIDLE) {
       throw new WebDFUError("Failed to return to idle state after abort: state " + state);
     }
   }
@@ -586,7 +622,7 @@ export class WebDFU {
       });
     }
 
-    while (!state_predicate(dfu_status.state) && dfu_status.state != dfuCommands.dfuERROR) {
+    while (!state_predicate(dfu_status.state) && dfu_status.state != DFU_STATE.dfuERROR) {
       await async_sleep(dfu_status.pollTimeout);
       dfu_status = await this.getStatus();
     }
@@ -654,12 +690,12 @@ export class WebDFU {
       let dfu_status;
       try {
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), transaction++);
-        dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
+        dfu_status = await this.poll_until_idle(DFU_STATE.dfuDOWNLOAD_IDLE);
       } catch (error) {
         throw new WebDFUError("Error during DFU download: " + error);
       }
 
-      if (dfu_status.status != dfuCommands.STATUS_OK) {
+      if (dfu_status.status != DFU_STATUS.STATUS_OK) {
         throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
@@ -683,13 +719,13 @@ export class WebDFU {
         // Wait until it returns to idle.
         // If it's not really manifestation tolerant, it might transition to MANIFEST_WAIT_RESET
         dfu_status = await this.poll_until(
-          (state) => state == dfuCommands.dfuIDLE || state == dfuCommands.dfuMANIFEST_WAIT_RESET
+          (state) => state == DFU_STATE.dfuIDLE || state == DFU_STATE.dfuMANIFEST_WAIT_RESET
         );
 
-        // if dfu_status.state == dfuCommands.dfuMANIFEST_WAIT_RESET
+        // if dfu_status.state == DFU_STATE.dfuMANIFEST_WAIT_RESET
         // => Device transitioned to MANIFEST_WAIT_RESET even though it is manifestation tolerant
 
-        if (dfu_status.status != dfuCommands.STATUS_OK) {
+        if (dfu_status.status != DFU_STATUS.STATUS_OK) {
           throw new WebDFUError(`DFU MANIFEST failed state=${dfu_status.state}, status=${dfu_status.status}`);
         }
       } catch (error) {
@@ -778,13 +814,13 @@ export class WebDFU {
       try {
         await this.dfuseCommand(DFUseCommands.SET_ADDRESS, address, 4);
         bytes_written = await this.download(data.slice(bytes_sent, bytes_sent + chunk_size), 2);
-        dfu_status = await this.poll_until_idle(dfuCommands.dfuDOWNLOAD_IDLE);
+        dfu_status = await this.poll_until_idle(DFU_STATE.dfuDOWNLOAD_IDLE);
         address += chunk_size;
       } catch (error) {
         throw new WebDFUError("Error during DfuSe download: " + error);
       }
 
-      if (dfu_status.status != dfuCommands.STATUS_OK) {
+      if (dfu_status.status != DFU_STATUS.STATUS_OK) {
         throw new WebDFUError(`DFU DOWNLOAD failed state=${dfu_status.state}, status=${dfu_status.status}`);
       }
 
@@ -802,7 +838,7 @@ export class WebDFU {
       throw new WebDFUError("Error during DfuSe manifestation: " + error);
     }
 
-    await this.poll_until((state) => state == dfuCommands.dfuMANIFEST);
+    await this.poll_until((state) => state == DFU_STATE.dfuMANIFEST);
   }
 
   private async do_dfuse_read(process: WebDFUProcessRead, xfer_size: number, max_size = Infinity) {
@@ -822,7 +858,7 @@ export class WebDFU {
     }
 
     let state = await this.getState();
-    if (state != dfuCommands.dfuIDLE) {
+    if (state != DFU_STATE.dfuIDLE) {
       await this.abortToIdle();
     }
     await this.dfuseCommand(DFUseCommands.SET_ADDRESS, startAddress, 4);
@@ -979,9 +1015,9 @@ export class WebDFU {
       throw new WebDFUError("Error during special DfuSe command " + commandNames[command] + ":" + error);
     }
 
-    let status = await this.poll_until((state) => state != dfuCommands.dfuDNBUSY);
+    let status = await this.poll_until((state) => state != DFU_STATE.dfuDNBUSY);
 
-    if (status.status != dfuCommands.STATUS_OK) {
+    if (status.status != DFU_STATUS.STATUS_OK) {
       throw new WebDFUError("Special DfuSe command " + command + " failed");
     }
   }
