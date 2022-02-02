@@ -58,6 +58,33 @@ const DFU_STATUS = {
   STATUS_OK: 0x00,
 }
 
+/**
+ * List of USB requests
+ * https://www.usb.org/sites/default/files/hid1_11.pdf
+ */
+const USB_REQUESTS = {
+  GET_DESCRIPTOR: 0x06 // page 59, chapter 7.1.1
+}
+
+/**
+ * List of USB descriptors
+ * https://www.usb.org/sites/default/files/hid1_11.pdf
+ */
+const USB_DESCRIPTOR_TYPES = {
+  DEVICE: 0x01, // page 66
+  CONFIGURATION: 0x02, // page 67
+  STRING: 0x03, // page 72
+  HID: 0x21 // page 68
+}
+
+/**
+ * LIst of USB Language IDs
+ * http://www.baiheee.com/Documents/090518/090518112619/USB_LANGIDs.pdf
+ */
+const USB_LANGUAGE_IDS = {
+  ENG_US: 0x0409 // English (United States)
+}
+
 export class WebDFU {
   events = createNanoEvents<WebDFUEvent>();
 
@@ -192,7 +219,7 @@ export class WebDFU {
     let configValue = this.device.configuration?.configurationValue;
     if (configDesc.bConfigurationValue == configValue) {
       for (let desc of configDesc.descriptors) {
-        if (desc.bDescriptorType == 0x21 && desc.hasOwnProperty("bcdDFUVersion")) {
+        if (desc.bDescriptorType == USB_DESCRIPTOR_TYPES.HID && desc.hasOwnProperty("bcdDFUVersion")) {
           funcDesc = desc as WebDFUInterfaceSubDescriptor;
           break;
         }
@@ -264,14 +291,12 @@ export class WebDFU {
   }
 
   private async readStringDescriptor(index: number, langID = 0) {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_STRING = 0x03;
-    const wValue = (DT_STRING << 8) | index;
+    const wValue = (USB_DESCRIPTOR_TYPES.STRING << 8) | index;
 
     const request_setup: USBControlTransferParameters = {
       requestType: "standard",
       recipient: "device",
-      request: GET_DESCRIPTOR,
+      request: USB_REQUESTS.GET_DESCRIPTOR,
       value: wValue,
       index: langID,
     };
@@ -304,15 +329,13 @@ export class WebDFU {
 
   // @ts-ignore
   private async readDeviceDescriptor(): Promise<DataView> {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_DEVICE = 0x01;
-    const wValue = DT_DEVICE << 8;
+    const wValue = USB_DESCRIPTOR_TYPES.DEVICE << 8;
 
     const result = await this.device.controlTransferIn(
       {
         requestType: "standard",
         recipient: "device",
-        request: GET_DESCRIPTOR,
+        request: USB_REQUESTS.GET_DESCRIPTOR,
         value: wValue,
         index: 0,
       },
@@ -360,7 +383,7 @@ export class WebDFU {
     // Retrieve interface name strings
     for (let index of allStringIndices) {
       try {
-        strings[index] = await this.readStringDescriptor(index, 0x0409);
+        strings[index] = await this.readStringDescriptor(index, USB_LANGUAGE_IDS.ENG_US);
       } catch (error) {
         console.log(error);
         strings[index] = null;
@@ -379,14 +402,12 @@ export class WebDFU {
   }
 
   private async readConfigurationDescriptor(index: number): Promise<DataView> {
-    const GET_DESCRIPTOR = 0x06;
-    const DT_CONFIGURATION = 0x02;
-    const wValue = (DT_CONFIGURATION << 8) | index;
+    const wValue = (USB_DESCRIPTOR_TYPES.CONFIGURATION << 8) | index;
 
     const setup: USBControlTransferParameters = {
       requestType: "standard",
       recipient: "device",
-      request: GET_DESCRIPTOR,
+      request: USB_REQUESTS.GET_DESCRIPTOR,
       value: wValue,
       index: 0,
     };
